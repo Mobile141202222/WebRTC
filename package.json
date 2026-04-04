@@ -1,0 +1,31 @@
+{
+  "name": "webrtc",
+  "version": "1.0.0",
+  "description": "Ephemeral voice and text chat using React, Firebase, and PeerJS.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "npm --prefix client run dev -- --host",
+    "dev:server": "node --watch server.js",
+    "build": "npm --prefix client run build",
+    "lint": "npm --prefix client run lint",
+    "start": "node server.js"
+  },
+  "keywords": [
+    "webrtc",
+    "peerjs",
+    "firebase",
+    "react",
+    "voice-chat"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "peer": "^1.0.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
