@@ -1,4 +1,5 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
+import { SendIcon } from './Icons.jsx';
 
 function ChatComposer({ disabled, onSend }) {
   const [draft, setDraft] = useState('');
@@ -20,12 +21,13 @@ function ChatComposer({ disabled, onSend }) {
         disabled={disabled}
         maxLength={420}
         onChange={(event) => setDraft(event.target.value)}
-        placeholder="Drop a quick update, invite note, or voice check..."
-        rows={3}
+        placeholder="Send message..."
+        rows={4}
         value={draft}
       />
-      <button className="primary-button" disabled={disabled || !draft.trim()} type="submit">
-        Send message
+      <button className="primary-button wide-button action-button" disabled={disabled || !draft.trim()} type="submit">
+        <SendIcon />
+        <span>Send</span>
       </button>
     </form>
   );

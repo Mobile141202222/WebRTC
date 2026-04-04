@@ -1,23 +1,34 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRightIcon, PlusIcon, VideoIcon, VoiceIcon } from '../components/Icons.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 import { getFirebaseConfigError, isFirebaseReady } from '../lib/firebase.js';
 import { generateRoomId } from '../lib/roomId.js';
 import { sanitizeDisplayName, sanitizeRoomId } from '../lib/sanitize.js';
 
 const STORAGE_KEY = 'ephemeral-chat-display-name';
+const ROOM_MODE_STORAGE_KEY = 'ephemeral-chat-room-mode';
 
-function LandingPage() {
+function LandingPage({ onToggleTheme, theme }) {
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState(
     () => localStorage.getItem(STORAGE_KEY) || '',
   );
   const [joinCode, setJoinCode] = useState('');
+  const [createMode, setCreateMode] = useState(
+    () => localStorage.getItem(ROOM_MODE_STORAGE_KEY) || 'voice',
+  );
   const [error, setError] = useState('');
 
   function rememberDisplayName(nextValue) {
     const cleanName = sanitizeDisplayName(nextValue);
     localStorage.setItem(STORAGE_KEY, cleanName);
     return cleanName;
+  }
+
+  function handleSelectMode(mode) {
+    setCreateMode(mode);
+    localStorage.setItem(ROOM_MODE_STORAGE_KEY, mode);
   }
 
   function handleCreateRoom() {
@@ -29,7 +40,7 @@ function LandingPage() {
     }
 
     rememberDisplayName(displayName);
-    navigate(`/room/${generateRoomId()}?host=1`);
+    navigate(`/room/${generateRoomId()}?host=1&mode=${createMode}`);
   }
 
   function handleJoinRoom(event) {
@@ -44,7 +55,7 @@ function LandingPage() {
     const cleanRoomId = sanitizeRoomId(joinCode);
 
     if (!cleanRoomId) {
-      setError('Add a valid 6-character room code first.');
+      setError('Enter room code');
       return;
     }
 
@@ -53,74 +64,122 @@ function LandingPage() {
   }
 
   return (
-    <main className="landing-page">
-      <section className="hero-panel">
-        <span className="eyebrow">React + Firebase + PeerJS</span>
-        <h1>Spin up a disposable voice room in seconds.</h1>
-        <p className="hero-copy">
-          Each room keeps text in Firebase Realtime Database, opens direct
-          WebRTC audio between browsers, and fades away once the room is no
-          longer active.
-        </p>
+    <main className="landing-page page-shell">
+      <header className="page-topbar">
+        <div className="brand-lockup brand-lockup-compact">
+          <span className="brand-mark">ROOMKIT</span>
+          <h1>Instant Rooms</h1>
+        </div>
+        <ThemeToggle onToggleTheme={onToggleTheme} theme={theme} />
+      </header>
+
+      <section className="hero-panel hero-grid">
+        <div className="hero-copy-block">
+          <span className="eyebrow">Private room experience</span>
+          <h2>Private Meeting</h2>
+          <p className="hero-copy">แชร์ลิงก์เดียวแล้วเริ่มคุยได้ทันที ทั้ง voice, video และ chat ใน layout ที่อ่านง่าย</p>
+          <div className="hero-tags">
+            <span className="info-chip">Ready to share</span>
+            <span className="info-chip">Realtime sync</span>
+            <span className="info-chip">Focused UI</span>
+          </div>
+        </div>
+
+        <div className="hero-surface">
+          <div className="mini-stat">
+            <span>Mode</span>
+            <strong>{createMode === 'video' ? 'Video room' : 'Voice room'}</strong>
+          </div>
+          <div className="mini-stat">
+            <span>Invite</span>
+            <strong>Single link</strong>
+          </div>
+          <div className="mini-stat">
+            <span>Flow</span>
+            <strong>Open and go</strong>
+          </div>
+        </div>
       </section>
 
-      <section className="landing-grid">
-        <article className="card create-card">
-          <span className="eyebrow">Step 1</span>
-          <h2>Set your display name</h2>
+      <section className="landing-grid landing-grid-compact">
+        <article className="card create-card elevated-card">
+          <div className="panel-head">
+            <div className="heading-group">
+              <span className="eyebrow">Create</span>
+              <h3>New room</h3>
+            </div>
+            <span className="count-badge">{createMode === 'video' ? 'Video' : 'Voice'}</span>
+          </div>
+
+          <label className="field-label" htmlFor="display-name">
+            Name
+          </label>
           <input
             className="text-input"
+            id="display-name"
             maxLength={24}
             onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Bas, Mint, Team Lead..."
+            placeholder="Your name"
             value={displayName}
           />
-          <button className="primary-button" onClick={handleCreateRoom} type="button">
-            Create new room
+
+          <div className="mode-picker">
+            <span className="field-label">Mode</span>
+            <div className="choice-grid">
+              <button
+                className={`choice-button ${createMode === 'voice' ? 'active' : ''}`}
+                onClick={() => handleSelectMode('voice')}
+                type="button"
+              >
+                <span className="choice-icon"><VoiceIcon /></span>
+                <strong>Voice</strong>
+                <span>Audio + chat</span>
+              </button>
+              <button
+                className={`choice-button ${createMode === 'video' ? 'active' : ''}`}
+                onClick={() => handleSelectMode('video')}
+                type="button"
+              >
+                <span className="choice-icon"><VideoIcon /></span>
+                <strong>Video</strong>
+                <span>Camera + audio</span>
+              </button>
+            </div>
+          </div>
+
+          <button className="primary-button action-button" onClick={handleCreateRoom} type="button">
+            <PlusIcon />
+            <span>Create</span>
           </button>
         </article>
 
-        <article className="card join-card">
-          <span className="eyebrow">Step 2</span>
-          <h2>Join from an invite</h2>
+        <article className="card join-card elevated-card">
+          <div className="panel-head">
+            <div className="heading-group">
+              <span className="eyebrow">Join</span>
+              <h3>Existing room</h3>
+            </div>
+            <span className="count-badge">Code</span>
+          </div>
+
           <form className="join-form" onSubmit={handleJoinRoom}>
+            <label className="field-label" htmlFor="join-code">
+              Room code
+            </label>
             <input
               className="text-input"
+              id="join-code"
               maxLength={6}
               onChange={(event) => setJoinCode(sanitizeRoomId(event.target.value))}
-              placeholder="ROOMID"
+              placeholder="AB12CD"
               value={joinCode}
             />
-            <button className="secondary-button" type="submit">
-              Join room
+            <button className="secondary-button strong-secondary wide-button action-button" type="submit">
+              <ArrowRightIcon />
+              <span>Join</span>
             </button>
           </form>
         </article>
-      </section>
-
-      <section className="card workflow-card">
-        <div className="section-heading">
-          <span className="eyebrow">System workflow</span>
-          <h2>How the room moves from empty to live</h2>
-        </div>
-        <div className="workflow-grid">
-          <article>
-            <strong>1. Create</strong>
-            <p>Generate a room ID and register the host in Firebase.</p>
-          </article>
-          <article>
-            <strong>2. Share</strong>
-            <p>Send the URL so guests can resolve the same room node instantly.</p>
-          </article>
-          <article>
-            <strong>3. Join</strong>
-            <p>Guests publish their peer IDs and presence state under participants.</p>
-          </article>
-          <article>
-            <strong>4. Talk</strong>
-            <p>Messages sync through Firebase while voice rides directly over WebRTC.</p>
-          </article>
-        </div>
       </section>
 
       {error ? <p className="feedback error">{error}</p> : null}

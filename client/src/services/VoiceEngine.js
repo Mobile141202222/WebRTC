@@ -1,4 +1,4 @@
-import Peer from 'peerjs';
+﻿import Peer from 'peerjs';
 
 function buildPeerConfig() {
   const secure = import.meta.env.VITE_PEER_SECURE === 'true';
@@ -22,6 +22,7 @@ export class VoiceEngine {
     this.calls = new Map();
     this.localParticipantId = '';
     this.localStream = null;
+    this.mediaUnavailable = false;
     this.peer = null;
     this.peerId = '';
   }
@@ -41,7 +42,7 @@ export class VoiceEngine {
     });
 
     peer.on('disconnected', () => {
-      this.callbacks.onStatusChange?.('Signaling disconnected. Retrying...');
+      this.callbacks.onStatusChange?.('Signal retrying');
       peer.reconnect();
     });
 
@@ -57,7 +58,7 @@ export class VoiceEngine {
 
       const handleOpen = (nextPeerId) => {
         cleanup();
-        this.callbacks.onStatusChange?.('PeerJS signaling ready.');
+        this.callbacks.onStatusChange?.('Signal ready');
         resolve(nextPeerId);
       };
 
@@ -73,34 +74,64 @@ export class VoiceEngine {
     return this.peerId;
   }
 
-  async ensureLocalStream() {
+  async ensureLocalStream({ mediaMode = 'voice' } = {}) {
     if (this.localStream) {
       return this.localStream;
     }
 
-    this.localStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
-    });
+    if (this.mediaUnavailable) {
+      throw new Error('Media unavailable');
+    }
 
+    try {
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: mediaMode === 'video',
+      });
+    } catch (error) {
+      if (mediaMode === 'video') {
+        this.callbacks.onStatusChange?.('Camera unavailable');
+
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+      } else {
+        this.mediaUnavailable = true;
+        throw error;
+      }
+    }
+
+    this.callbacks.onLocalStream?.(this.localStream);
     return this.localStream;
+  }
+
+  getLocalState() {
+    const audioTracks = this.localStream?.getAudioTracks() || [];
+    const videoTracks = this.localStream?.getVideoTracks() || [];
+
+    return {
+      audioEnabled: audioTracks.some((track) => track.enabled),
+      hasVideoTrack: videoTracks.length > 0,
+      videoEnabled: videoTracks.some((track) => track.enabled),
+    };
   }
 
   async answerIncomingCall(call) {
     try {
-      const stream = await this.ensureLocalStream();
+      const stream = await this.ensureLocalStream({ mediaMode: 'voice' });
       const remoteParticipantId = call.metadata?.participantId || call.peer;
 
       call.answer(stream);
       this.attachCall(remoteParticipantId, call);
-      this.callbacks.onStatusChange?.('Voice bridge active.');
+      this.callbacks.onStatusChange?.('Media live');
     } catch (error) {
       this.callbacks.onError?.(error);
     }
   }
 
   async syncParticipants(participants, selfParticipantId) {
-    if (!this.peer || !this.peerId) {
+    if (!this.peer || !this.peerId || this.mediaUnavailable) {
       return;
     }
 
@@ -122,7 +153,9 @@ export class VoiceEngine {
       }
 
       try {
-        const stream = await this.ensureLocalStream();
+        const stream = await this.ensureLocalStream({
+          mediaMode: participant.videoEnabled ? 'video' : 'voice',
+        });
         const outgoingCall = this.peer.call(participant.peerId, stream, {
           metadata: {
             participantId: selfParticipantId,
@@ -131,7 +164,7 @@ export class VoiceEngine {
 
         if (outgoingCall) {
           this.attachCall(participant.id, outgoingCall);
-          this.callbacks.onStatusChange?.(`Voice linked with ${participant.name}.`);
+          this.callbacks.onStatusChange?.('Media live');
         }
       } catch (error) {
         this.callbacks.onError?.(error);
@@ -150,14 +183,34 @@ export class VoiceEngine {
 
   setMuted(muted) {
     if (!this.localStream) {
-      return;
+      return this.getLocalState();
     }
 
     for (const track of this.localStream.getAudioTracks()) {
       track.enabled = !muted;
     }
 
-    this.callbacks.onStatusChange?.(muted ? 'Microphone muted.' : 'Microphone live.');
+    this.callbacks.onStatusChange?.(muted ? 'Mic off' : 'Mic on');
+    return this.getLocalState();
+  }
+
+  setCameraEnabled(enabled) {
+    if (!this.localStream) {
+      return false;
+    }
+
+    const videoTracks = this.localStream.getVideoTracks();
+
+    if (videoTracks.length === 0) {
+      return false;
+    }
+
+    for (const track of videoTracks) {
+      track.enabled = enabled;
+    }
+
+    this.callbacks.onStatusChange?.(enabled ? 'Camera on' : 'Camera off');
+    return this.getLocalState();
   }
 
   destroy() {
@@ -177,7 +230,9 @@ export class VoiceEngine {
       this.peer.destroy();
     }
 
+    this.callbacks.onLocalStream?.(null);
     this.localStream = null;
+    this.mediaUnavailable = false;
     this.peer = null;
     this.peerId = '';
   }

@@ -1,4 +1,4 @@
-import {
+﻿import {
   get,
   onDisconnect,
   onValue,
@@ -30,7 +30,14 @@ function messagesRef(database, roomId) {
   return ref(database, `rooms/${roomId}/messages`);
 }
 
-function buildParticipant({ participantId, displayName, peerId, isHost }) {
+function buildParticipant({
+  participantId,
+  displayName,
+  peerId = '',
+  isHost,
+  audioEnabled = true,
+  videoEnabled = false,
+}) {
   const now = Date.now();
 
   return {
@@ -40,44 +47,83 @@ function buildParticipant({ participantId, displayName, peerId, isHost }) {
     name: sanitizeDisplayName(displayName),
     peerId,
     isHost,
+    audioEnabled,
+    videoEnabled,
   };
 }
 
-export async function createRoom({ roomId, participantId, displayName, peerId }) {
-  const database = assertFirebaseConfigured();
-  const roomSnapshot = await get(roomRef(database, roomId));
+function buildRoomMetadata({
+  hostParticipantId,
+  hostPeerId,
+  mediaMode = 'voice',
+  previousMetadata,
+}) {
   const now = Date.now();
+
+  return {
+    createdAt: previousMetadata?.createdAt || now,
+    expiresAt: now + ROOM_TTL_MS,
+    hostParticipantId,
+    hostPeerId,
+    mediaMode,
+    updatedAt: now,
+  };
+}
+
+export async function createRoom({
+  roomId,
+  participantId,
+  displayName,
+  peerId,
+  mediaMode = 'voice',
+}) {
+  const database = assertFirebaseConfigured();
+  const existingRoomSnapshot = await get(roomRef(database, roomId));
   const participant = buildParticipant({
     participantId,
     displayName,
     peerId,
     isHost: true,
+    videoEnabled: mediaMode === 'video',
   });
 
-  if (!roomSnapshot.exists()) {
-    await set(roomRef(database, roomId), {
-      metadata: {
-        createdAt: now,
-        expiresAt: now + ROOM_TTL_MS,
+  if (!existingRoomSnapshot.exists()) {
+    const nextRoom = {
+      metadata: buildRoomMetadata({
         hostParticipantId: participantId,
         hostPeerId: peerId,
-        updatedAt: now,
-      },
+        mediaMode,
+      }),
       participants: {
         [participantId]: participant,
       },
-    });
+    };
 
-    return;
+    await set(roomRef(database, roomId), nextRoom);
+    return nextRoom;
   }
 
+  const existingRoom = existingRoomSnapshot.val();
+  const nextMetadata = buildRoomMetadata({
+    hostParticipantId: participantId,
+    hostPeerId: peerId,
+    mediaMode,
+    previousMetadata: existingRoom.metadata,
+  });
+
   await update(roomRef(database, roomId), {
-    'metadata/expiresAt': now + ROOM_TTL_MS,
-    'metadata/hostParticipantId': participantId,
-    'metadata/hostPeerId': peerId,
-    'metadata/updatedAt': now,
+    metadata: nextMetadata,
     [`participants/${participantId}`]: participant,
   });
+
+  return {
+    ...existingRoom,
+    metadata: nextMetadata,
+    participants: {
+      ...(existingRoom.participants || {}),
+      [participantId]: participant,
+    },
+  };
 }
 
 export async function joinRoom({ roomId, participantId, displayName, peerId }) {
@@ -85,7 +131,7 @@ export async function joinRoom({ roomId, participantId, displayName, peerId }) {
   const roomSnapshot = await get(roomRef(database, roomId));
 
   if (!roomSnapshot.exists()) {
-    throw new Error('Room not found or already closed.');
+    throw new Error('ไม่พบห้องนี้ หรือห้องถูกปิดไปแล้ว');
   }
 
   const room = roomSnapshot.val();
@@ -93,18 +139,44 @@ export async function joinRoom({ roomId, participantId, displayName, peerId }) {
 
   if (room.metadata?.expiresAt && room.metadata.expiresAt < now) {
     await remove(roomRef(database, roomId));
-    throw new Error('Room expired. Create a fresh one and try again.');
+    throw new Error('ห้องนี้หมดอายุแล้ว กรุณาสร้างห้องใหม่');
   }
+
+  const participant = buildParticipant({
+    participantId,
+    displayName,
+    peerId,
+    isHost: false,
+    videoEnabled: false,
+  });
 
   await update(roomRef(database, roomId), {
     'metadata/expiresAt': now + ROOM_TTL_MS,
     'metadata/updatedAt': now,
-    [`participants/${participantId}`]: buildParticipant({
-      participantId,
-      displayName,
-      peerId,
-      isHost: false,
-    }),
+    [`participants/${participantId}`]: participant,
+  });
+
+  return {
+    ...room,
+    participants: {
+      ...(room.participants || {}),
+      [participantId]: participant,
+    },
+  };
+}
+
+export async function updateParticipantState({ roomId, participantId, patch }) {
+  const database = assertFirebaseConfigured();
+  const now = Date.now();
+
+  await update(participantRef(database, roomId, participantId), {
+    ...patch,
+    lastSeenAt: now,
+  });
+
+  await update(ref(database, `rooms/${roomId}/metadata`), {
+    expiresAt: now + ROOM_TTL_MS,
+    updatedAt: now,
   });
 }
 
@@ -155,7 +227,6 @@ export function subscribeToParticipants(roomId, callback) {
 
 export function messagesCollection(roomId) {
   const database = assertFirebaseConfigured();
-
   return messagesRef(database, roomId);
 }
 
@@ -204,3 +275,4 @@ export async function deleteRoomIfEmpty(roomId) {
 
   return false;
 }
+

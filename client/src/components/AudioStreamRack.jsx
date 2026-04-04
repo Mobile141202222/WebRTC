@@ -1,59 +1,176 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 
-function RemoteAudioCard({ stream, label }) {
-  const audioRef = useRef(null);
+function getInitials(label = '') {
+  const [first = '?', second = ''] = label.trim().split(/\s+/);
+  return `${first[0] || ''}${second[0] || ''}`.toUpperCase() || '?';
+}
+
+function useAudioLevel(stream) {
+  const [level, setLevel] = useState(0);
 
   useEffect(() => {
-    if (!audioRef.current) {
+    if (!stream) {
+      const resetFrame = window.requestAnimationFrame(() => setLevel(0));
+      return () => window.cancelAnimationFrame(resetFrame);
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      const resetFrame = window.requestAnimationFrame(() => setLevel(0));
+      return () => window.cancelAnimationFrame(resetFrame);
+    }
+
+    let animationFrameId = 0;
+    const audioContext = new AudioContextClass();
+    const analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(stream);
+
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.82;
+    const data = new Uint8Array(analyser.fftSize);
+    source.connect(analyser);
+
+    const updateLevel = () => {
+      analyser.getByteTimeDomainData(data);
+
+      let sumSquares = 0;
+      for (const value of data) {
+        const normalized = (value - 128) / 128;
+        sumSquares += normalized * normalized;
+      }
+
+      const rms = Math.sqrt(sumSquares / data.length);
+      const nextLevel = Math.min(1, rms * 4.8);
+      setLevel(nextLevel);
+      animationFrameId = window.requestAnimationFrame(updateLevel);
+    };
+
+    void audioContext.resume().catch(() => {});
+    updateLevel();
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      source.disconnect();
+      analyser.disconnect();
+      void audioContext.close().catch(() => {});
+      window.requestAnimationFrame(() => setLevel(0));
+    };
+  }, [stream]);
+
+  return level;
+}
+
+function AudioLevelMeter({ level }) {
+  const bars = 8;
+  const activeBars = Math.max(1, Math.round(level * bars));
+
+  return (
+    <div aria-label={`Audio level ${Math.round(level * 100)} percent`} className="audio-meter" role="img">
+      {Array.from({ length: bars }, (_, index) => (
+        <span
+          className={`audio-meter-bar ${index < activeBars && level > 0.03 ? 'active' : ''}`}
+          key={index}
+          style={{ height: `${30 + index * 8}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MediaTile({ label, muted = false, role, stream }) {
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const hasVideoTrack = (stream?.getVideoTracks() || []).length > 0;
+  const level = useAudioLevel(stream);
+
+  useEffect(() => {
+    if (!stream) {
       return;
     }
 
-    audioRef.current.srcObject = stream;
-  }, [stream]);
+    if (hasVideoTrack && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.srcObject = stream;
+    }
+  }, [hasVideoTrack, stream]);
 
   return (
-    <article className="audio-card">
-      <div>
-        <strong>{label}</strong>
-        <p>Live voice channel</p>
+    <article className={`media-tile ${hasVideoTrack ? 'video' : 'audio'}`}>
+      <div className="media-surface">
+        {hasVideoTrack ? (
+          <video autoPlay muted={muted} playsInline ref={videoRef} />
+        ) : (
+          <div className="media-placeholder">
+            <span className="media-avatar">{getInitials(label)}</span>
+          </div>
+        )}
+        {!hasVideoTrack && stream ? <audio autoPlay muted={muted} playsInline ref={audioRef} /> : null}
       </div>
-      <audio autoPlay playsInline ref={audioRef} />
+      <div className="media-caption media-caption-extended">
+        <div>
+          <strong>{label}</strong>
+          <span>{role}</span>
+        </div>
+        <div className="media-side-meta">
+          <AudioLevelMeter level={level} />
+          <span className="media-badge">{hasVideoTrack ? 'Video' : 'Audio'}</span>
+        </div>
+      </div>
     </article>
   );
 }
 
-function AudioStreamRack({ remoteStreams, participants }) {
-  if (remoteStreams.length === 0) {
+function AudioStreamRack({ localStream, mediaMode, participants, remoteStreams }) {
+  const liveCount = remoteStreams.length + (localStream ? 1 : 0);
+  const hasRemoteStreams = remoteStreams.length > 0;
+
+  if (!localStream && !hasRemoteStreams) {
     return (
-      <section className="card audio-rack empty">
-        <div className="section-heading">
-          <span className="eyebrow">Voice mesh</span>
-          <h2>Waiting for someone to unmute</h2>
+      <section className="card media-stage empty elevated-card">
+        <div className="panel-head">
+          <div className="heading-group">
+            <span className="eyebrow">Stage</span>
+            <h2>Waiting for stream</h2>
+          </div>
+          <span className="count-badge">{mediaMode === 'video' ? 'Video' : 'Voice'}</span>
         </div>
-        <p className="muted">
-          Once another participant grants microphone access, their live audio
-          card will appear here automatically.
-        </p>
+        <div className="stage-empty">
+          <p className="muted">{mediaMode === 'video' ? 'เปิด mic หรือ camera เมื่อพร้อม' : 'เปิด mic เพื่อเริ่มคุย'}</p>
+        </div>
       </section>
     );
   }
 
   return (
-    <section className="card audio-rack">
-      <div className="section-heading">
-        <span className="eyebrow">Voice mesh</span>
-        <h2>Live connections</h2>
+    <section className="card media-stage elevated-card">
+      <div className="panel-head">
+        <div className="heading-group">
+          <span className="eyebrow">Stage</span>
+          <h2>{mediaMode === 'video' ? 'Live media' : 'Live audio'}</h2>
+        </div>
+        <span className="count-badge">{liveCount}</span>
       </div>
-      <div className="audio-grid">
+
+      <div className="media-grid">
+        {localStream ? (
+          <MediaTile label="You" muted role="Local" stream={localStream} />
+        ) : null}
+
         {remoteStreams.map((remoteStream) => {
           const participant = participants.find(
             (entry) => entry.id === remoteStream.participantId,
           );
 
           return (
-            <RemoteAudioCard
+            <MediaTile
               key={remoteStream.participantId}
               label={participant?.name || 'Guest'}
+              role="Remote"
               stream={remoteStream.stream}
             />
           );

@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+﻿import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
@@ -13,9 +13,6 @@ const firebaseConfig = {
 
 const requiredEnvKeys = ['databaseURL'];
 const missingRequiredKeys = requiredEnvKeys.filter((key) => !firebaseConfig[key]);
-const missingOptionalKeys = Object.entries(firebaseConfig)
-  .filter(([key, value]) => key !== 'databaseURL' && !value)
-  .map(([key]) => key);
 
 let firebaseApp = null;
 let database = null;
@@ -38,11 +35,7 @@ export function getFirebaseConfigError() {
 }
 
 export function getFirebaseConfigWarning() {
-  if (missingOptionalKeys.length === 0) {
-    return '';
-  }
-
-  return `Optional Firebase values are still empty: ${missingOptionalKeys.join(', ')}`;
+  return '';
 }
 
 export function assertFirebaseConfigured() {
