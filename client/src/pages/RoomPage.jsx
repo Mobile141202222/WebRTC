@@ -58,6 +58,7 @@ function RoomPage({ onToggleTheme, theme }) {
   const [participants, setParticipants] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState([]);
   const [localStream, setLocalStream] = useState(null);
+  const [localPreviewStream, setLocalPreviewStream] = useState(null);
   const [roomEnded, setRoomEnded] = useState(false);
   const [selfPeerId, setSelfPeerId] = useState('');
   const [roomMediaMode, setRoomMediaMode] = useState(requestedMediaMode);
@@ -150,6 +151,10 @@ function RoomPage({ onToggleTheme, theme }) {
     setLocalStream(stream);
   });
 
+  const onLocalPreviewStream = useEffectEvent((stream) => {
+    setLocalPreviewStream(stream);
+  });
+
   const onVoiceError = useEffectEvent((voiceError) => {
     const nextMessage = voiceError?.message || 'Media unavailable';
     setVoiceStatus(nextMessage);
@@ -204,6 +209,7 @@ function RoomPage({ onToggleTheme, theme }) {
       onDevicesChanged,
       onError: onVoiceError,
       onLocalStream,
+      onLocalPreviewStream,
       onRemoteDisconnect,
       onRemoteStream,
       onStatusChange: setVoiceStatus,
@@ -218,6 +224,7 @@ function RoomPage({ onToggleTheme, theme }) {
     setParticipants([]);
     setRemoteStreams([]);
     setLocalStream(null);
+    setLocalPreviewStream(null);
     setRoomMediaMode(requestedMediaMode);
     setSelfPeerId('');
     setMuted(false);
@@ -640,6 +647,7 @@ function RoomPage({ onToggleTheme, theme }) {
         isExpanded={layoutFocus === 'stage'}
         localScreenSharing={screenSharing}
         localStream={localStream}
+        localPreviewStream={localPreviewStream}
         mediaMode={roomMediaMode}
         onToggleExpand={() => setFocusedPanel((current) => (current === 'stage' ? null : 'stage'))}
         onToggleFullscreen={() => {

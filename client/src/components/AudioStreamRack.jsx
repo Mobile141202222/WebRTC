@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CollapseWideIcon, ExpandWideIcon, FullscreenIcon } from './Icons.jsx';
 
 function getInitials(label = '') {
@@ -11,7 +11,9 @@ function useAudioLevel(stream) {
   const lastLevelRef = useRef(0);
 
   useEffect(() => {
-    if (!stream) {
+    const hasAudioTrack = Boolean(stream?.getAudioTracks?.().length);
+
+    if (!stream || !hasAudioTrack) {
       const resetFrame = window.requestAnimationFrame(() => {
         lastLevelRef.current = 0;
         setLevel(0);
@@ -127,18 +129,34 @@ function FeaturedTile({ entry }) {
   const isSpeaking = level > 0.12;
 
   useEffect(() => {
-    if (!entry.stream) {
-      return;
+    const videoElement = videoRef.current;
+    const audioElement = audioRef.current;
+
+    if (videoElement) {
+      videoElement.srcObject = hasVideoTrack && entry.stream ? entry.stream : null;
+
+      if (hasVideoTrack && entry.stream) {
+        void videoElement.play?.().catch(() => {});
+      }
     }
 
-    if (hasVideoTrack && videoRef.current) {
-      videoRef.current.srcObject = entry.stream;
-      return;
+    if (audioElement) {
+      audioElement.srcObject = !hasVideoTrack && entry.stream ? entry.stream : null;
+
+      if (!hasVideoTrack && entry.stream) {
+        void audioElement.play?.().catch(() => {});
+      }
     }
 
-    if (audioRef.current) {
-      audioRef.current.srcObject = entry.stream;
-    }
+    return () => {
+      if (videoElement) {
+        videoElement.srcObject = null;
+      }
+
+      if (audioElement) {
+        audioElement.srcObject = null;
+      }
+    };
   }, [entry.stream, hasVideoTrack]);
 
   return (
@@ -193,18 +211,34 @@ function StandardTile({ entry }) {
   const isSpeaking = level > 0.12;
 
   useEffect(() => {
-    if (!entry.stream) {
-      return;
+    const videoElement = videoRef.current;
+    const audioElement = audioRef.current;
+
+    if (videoElement) {
+      videoElement.srcObject = hasVideoTrack && entry.stream ? entry.stream : null;
+
+      if (hasVideoTrack && entry.stream) {
+        void videoElement.play?.().catch(() => {});
+      }
     }
 
-    if (hasVideoTrack && videoRef.current) {
-      videoRef.current.srcObject = entry.stream;
-      return;
+    if (audioElement) {
+      audioElement.srcObject = !hasVideoTrack && entry.stream ? entry.stream : null;
+
+      if (!hasVideoTrack && entry.stream) {
+        void audioElement.play?.().catch(() => {});
+      }
     }
 
-    if (audioRef.current) {
-      audioRef.current.srcObject = entry.stream;
-    }
+    return () => {
+      if (videoElement) {
+        videoElement.srcObject = null;
+      }
+
+      if (audioElement) {
+        audioElement.srcObject = null;
+      }
+    };
   }, [entry.stream, hasVideoTrack]);
 
   return (
@@ -233,17 +267,28 @@ function StandardTile({ entry }) {
   );
 }
 
-function buildEntries({ localScreenSharing, localStream, participants, remoteStreams }) {
+function buildEntries({ localPreviewStream, localScreenSharing, localStream, participants, remoteStreams }) {
   const entries = [];
 
   if (localStream) {
     entries.push({
-      id: 'local',
+      id: localScreenSharing ? 'local-screen' : 'local',
       label: 'You',
       muted: true,
       role: localScreenSharing ? 'Screen share' : 'Local',
       screenSharing: localScreenSharing,
       stream: localStream,
+    });
+  }
+
+  if (localScreenSharing && localPreviewStream) {
+    entries.push({
+      id: 'local-camera-preview',
+      label: 'You',
+      muted: true,
+      role: 'Webcam',
+      screenSharing: false,
+      stream: localPreviewStream,
     });
   }
 
@@ -265,6 +310,7 @@ function buildEntries({ localScreenSharing, localStream, participants, remoteStr
 
 function AudioStreamRack({
   isExpanded = false,
+  localPreviewStream = null,
   localScreenSharing = false,
   localStream,
   mediaMode,
@@ -274,6 +320,7 @@ function AudioStreamRack({
   remoteStreams,
 }) {
   const entries = buildEntries({
+    localPreviewStream,
     localScreenSharing,
     localStream,
     participants,
@@ -300,7 +347,7 @@ function AudioStreamRack({
           </div>
         </div>
         <div className="stage-empty">
-          <p className="muted">{mediaMode === 'video' ? 'เปิด mic หรือ camera เมื่อพร้อม' : 'เปิด mic เพื่อเริ่มคุย'}</p>
+          <p className="muted">{mediaMode === 'video' ? 'Turn on mic or camera when ready' : 'Turn on mic to start talking'}</p>
         </div>
       </section>
     );

@@ -212,10 +212,10 @@ export class VoiceEngine {
       },
     );
 
-    let cameraSourceStream = null;
+    let cameraSourceStream = this.screenStream ? this.cameraSourceStream : null;
     let videoTrack = this.screenStream?.getVideoTracks()?.[0] || null;
 
-    if (!videoTrack && mediaMode === 'video') {
+    if (mediaMode === 'video' && !videoTrack) {
       cameraSourceStream = await this.requestUserMedia(
         {
           audio: false,
@@ -226,6 +226,9 @@ export class VoiceEngine {
           video: true,
         },
       );
+    }
+
+    if (!videoTrack && cameraSourceStream) {
       videoTrack = cameraSourceStream.getVideoTracks()[0] || null;
     }
 
@@ -259,6 +262,7 @@ export class VoiceEngine {
     this.cameraSourceStream = cameraSourceStream;
     this.localStream = stream;
     this.callbacks.onLocalStream?.(stream);
+    this.callbacks.onLocalPreviewStream?.(cameraSourceStream);
   }
 
   async ensureLocalStream({ mediaMode = 'voice' } = {}) {
@@ -498,6 +502,7 @@ export class VoiceEngine {
     }
 
     this.callbacks.onLocalStream?.(null);
+    this.callbacks.onLocalPreviewStream?.(null);
     this.audioSourceStream = null;
     this.cameraSourceStream = null;
     this.screenStream = null;
