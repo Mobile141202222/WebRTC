@@ -44,6 +44,8 @@ function RoomPage({ onToggleTheme, theme }) {
   );
   const [nameDraft, setNameDraft] = useState(displayName);
   const [copyState, setCopyState] = useState('Copy');
+  const [roomCodeState, setRoomCodeState] = useState('Copy room');
+  const [shareState, setShareState] = useState('Share');
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [isBooting, setIsBooting] = useState(true);
@@ -71,6 +73,13 @@ function RoomPage({ onToggleTheme, theme }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [watchParty, setWatchParty] = useState(null);
   const [focusedPanel, setFocusedPanel] = useState(null);
+  const [isPortraitViewport, setIsPortraitViewport] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.innerHeight > window.innerWidth;
+  });
 
   const inviteLink = `${window.location.origin}/room/${roomId}`;
   const selfParticipant = {
@@ -85,8 +94,9 @@ function RoomPage({ onToggleTheme, theme }) {
   const watchPartyActive = Boolean(watchParty?.videoId);
   const watchPartyPriority = Boolean(watchParty?.videoId && watchParty?.status === 'playing');
   const layoutFocus = focusedPanel || (watchPartyPriority ? 'watch' : null);
-  const showWatchFirst = layoutFocus === 'watch' || (watchPartyActive && layoutFocus !== 'stage');
-  const stageInRail = watchPartyActive && layoutFocus !== 'stage';
+  const showWatchFirst = watchPartyActive || layoutFocus === 'watch';
+  const stageInRail = watchPartyActive;
+  const portraitWatchLayout = watchPartyActive && isPortraitViewport;
 
   function applyLocalState(localState) {
     setMuted(!localState.audioEnabled);
@@ -148,6 +158,23 @@ function RoomPage({ onToggleTheme, theme }) {
   const onDevicesChanged = useEffectEvent((nextDevices) => {
     setAvailableDevices(nextDevices);
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const syncViewportShape = () => {
+      setIsPortraitViewport(window.innerHeight > window.innerWidth);
+    };
+
+    syncViewportShape();
+    window.addEventListener('resize', syncViewportShape);
+
+    return () => {
+      window.removeEventListener('resize', syncViewportShape);
+    };
+  }, []);
 
   useEffect(() => {
     if (watchPartyPriority) {
@@ -406,6 +433,44 @@ function RoomPage({ onToggleTheme, theme }) {
     }
   }
 
+
+  async function handleCopyRoomId() {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setRoomCodeState('Copied');
+      window.setTimeout(() => setRoomCodeState('Copy room'), 1800);
+    } catch {
+      setRoomCodeState('Retry');
+      window.setTimeout(() => setRoomCodeState('Copy room'), 1800);
+    }
+  }
+
+  async function handleShareInvite() {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          text: `Join room ${roomId}`,
+          title: `Private Meeting ${roomId}`,
+          url: inviteLink,
+        });
+        setShareState('Shared');
+        window.setTimeout(() => setShareState('Share'), 1800);
+        return;
+      }
+
+      await navigator.clipboard.writeText(inviteLink);
+      setShareState('Shared');
+      window.setTimeout(() => setShareState('Share'), 1800);
+    } catch (shareError) {
+      if (shareError?.name === 'AbortError') {
+        setShareState('Share');
+        return;
+      }
+
+      setShareState('Retry');
+      window.setTimeout(() => setShareState('Share'), 1800);
+    }
+  }
   function handleSaveName(event) {
     event.preventDefault();
 
@@ -612,10 +677,14 @@ function RoomPage({ onToggleTheme, theme }) {
           copyState={copyState}
           inviteLink={inviteLink}
           onCopyInvite={handleCopyInvite}
+          onCopyRoomId={handleCopyRoomId}
+          onShareInvite={handleShareInvite}
           onToggleTheme={onToggleTheme}
           participantCount={participants.length || 1}
+          roomCodeState={roomCodeState}
           roomId={roomId}
           roomMediaMode={roomMediaMode}
+          shareState={shareState}
           theme={theme}
         />
 
@@ -623,7 +692,11 @@ function RoomPage({ onToggleTheme, theme }) {
         {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
         {isBooting ? <p className="feedback">Connecting...</p> : null}
 
-        <div className={`room-layout refined-room-layout studio-layout ${layoutFocus ? `focus-${layoutFocus}` : ''} ${watchPartyActive ? 'watch-active' : ''}`}>
+        <div
+          className={`room-layout refined-room-layout studio-layout ${layoutFocus ? `focus-${layoutFocus}` : ''} ${watchPartyActive ? 'watch-active' : ''} ${portraitWatchLayout ? 'watch-portrait' : ''}`}
+        >
+          {portraitWatchLayout ? <div className="watch-hero-slot">{watchPanel}</div> : null}
+
           <aside className="chat-rail">
             {stageInRail ? stagePanel : null}
             <div className="chat-slot">
@@ -633,10 +706,12 @@ function RoomPage({ onToggleTheme, theme }) {
             </div>
           </aside>
 
-          <div className={`primary-column main-stage-column ${showWatchFirst ? 'watch-dominant' : 'stage-dominant'}`}>
-            {showWatchFirst ? watchPanel : stagePanel}
-            {!stageInRail ? (showWatchFirst ? stagePanel : watchPanel) : null}
-          </div>
+          {!portraitWatchLayout ? (
+            <div className={`primary-column main-stage-column ${showWatchFirst ? 'watch-dominant' : 'stage-dominant'}`}>
+              {showWatchFirst ? watchPanel : stagePanel}
+              {!stageInRail ? (showWatchFirst ? stagePanel : watchPanel) : null}
+            </div>
+          ) : null}
 
           <aside className="sidebar-column utility-column">
             <div className="console-slot">
@@ -695,6 +770,8 @@ function RoomPage({ onToggleTheme, theme }) {
 }
 
 export default RoomPage;
+
+
 
 
 

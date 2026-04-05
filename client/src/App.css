@@ -339,6 +339,11 @@
   align-items: start;
 }
 
+.watch-hero-slot {
+  grid-area: watch;
+  min-width: 0;
+}
+
 .chat-rail {
   grid-area: chat;
   display: grid;
@@ -367,24 +372,68 @@
 .people-slot,
 .chat-rail,
 .main-stage-column,
-.utility-column {
+.utility-column,
+.watch-hero-slot {
   min-width: 0;
 }
 
 .chat-rail .chat-panel {
   min-height: calc(100vh - 210px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .chat-rail .message-list {
   max-height: clamp(260px, 46vh, 680px);
 }
 
+.chat-rail .message-empty {
+  min-height: 132px;
+  border-radius: 26px;
+}
+
+.chat-rail .composer {
+  gap: 12px;
+}
+
 .chat-rail .composer-input {
-  min-height: 148px;
+  min-height: 136px;
+  border-radius: 24px;
 }
 
 .studio-layout.watch-active .chat-rail {
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.studio-layout.watch-portrait,
+.refined-room-layout.watch-portrait.focus-stage,
+.refined-room-layout.watch-portrait.focus-watch {
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 19vw, 340px);
+  grid-template-areas:
+    "watch watch"
+    "chat utility";
+}
+
+.studio-layout.watch-portrait .watch-hero-slot .watch-party-card {
+  gap: 16px;
+}
+
+.studio-layout.watch-portrait .watch-hero-slot .watch-party-player-shell,
+.studio-layout.watch-portrait .watch-hero-slot .watch-party-player,
+.studio-layout.watch-portrait .watch-hero-slot .watch-party-player iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+}
+
+.studio-layout.watch-portrait .chat-rail {
+  grid-template-columns: clamp(280px, 28vw, 340px) minmax(0, 1fr);
+  grid-template-rows: auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.studio-layout.watch-portrait .chat-rail .chat-panel {
+  min-height: auto;
 }
 
 .main-stage-column .watch-shell,
@@ -424,6 +473,12 @@
 
 .refined-room-layout.focus-watch {
   grid-template-columns: clamp(260px, 16vw, 320px) minmax(0, 1.42fr) clamp(260px, 17vw, 320px);
+}
+
+.refined-room-layout.watch-portrait.focus-watch .watch-hero-slot .watch-party-player-shell,
+.refined-room-layout.watch-portrait.focus-watch .watch-hero-slot .watch-party-player,
+.refined-room-layout.watch-portrait.focus-watch .watch-hero-slot .watch-party-player iframe {
+  aspect-ratio: 16 / 9;
 }
 
 .refined-room-layout.focus-stage .chat-rail,
@@ -557,54 +612,9 @@
   border-radius: 16px;
 }
 
-.console-card,
-.exit-card {
-  gap: 18px;
-}
-
-.console-slot .console-stack {
-  gap: 18px;
-}
-
-.panel-head-spacious {
-  margin-bottom: 2px;
-}
-
-.icon-toolbar-room {
-  justify-content: flex-start;
-  padding-top: 4px;
-}
-
-.choice-button:hover,
-.primary-button:hover,
-.secondary-button:hover,
-.danger-button:hover,
-.link-button:hover,
-.theme-toggle:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-soft);
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.56;
-  transform: none;
-  box-shadow: none;
-}
-
-.wide-button,
-.control-button {
-  width: 100%;
-}
-
-.button-stack {
-  flex-direction: column;
-  align-items: stretch;
-}
-
 .room-banner {
-  gap: 18px;
-  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 440px);
   grid-template-areas:
     "title invite"
     "meta invite";
@@ -613,6 +623,24 @@ button:disabled {
 
 .room-title-row {
   grid-area: title;
+  align-items: flex-start;
+}
+
+.room-heading-stack {
+  gap: 10px;
+}
+
+.room-code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.room-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .room-meta-row {
@@ -621,7 +649,33 @@ button:disabled {
 
 .invite-panel {
   grid-area: invite;
-  align-self: stretch;
+  align-self: start;
+  justify-self: end;
+  width: min(100%, 400px);
+  gap: 8px;
+}
+
+.invite-label {
+  margin-left: 2px;
+}
+
+.invite-row.invite-compact-row {
+  align-items: stretch;
+  gap: 10px;
+}
+
+.invite-link-frame {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-soft);
+  background: var(--panel-muted);
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-banner h1 {
@@ -633,14 +687,11 @@ button:disabled {
   gap: 0;
 }
 
-.invite-row.compact-row {
-  align-items: stretch;
-}
-
 .media-stage,
 .watch-party-card {
-  gap: 18px;
+  gap: 16px;
 }
+
 
 .share-priority-stage {
   gap: 22px;
@@ -922,13 +973,14 @@ button:disabled {
 .message-empty {
   display: grid;
   place-items: center;
-  min-height: 180px;
+  min-height: 140px;
   text-align: center;
 }
 
 .composer-input {
   min-height: 120px;
   resize: vertical;
+  border-radius: 24px;
 }
 
 .participant-card {
@@ -957,7 +1009,7 @@ button:disabled {
 .watch-party-player iframe {
   width: 100%;
   height: 100%;
-  min-height: 320px;
+  min-height: 0;
 }
 
 .watch-party-toolbar {
@@ -1071,6 +1123,21 @@ button:disabled {
       "main"
       "utility";
   }
+
+  .studio-layout.watch-portrait,
+  .refined-room-layout.watch-portrait.focus-stage,
+  .refined-room-layout.watch-portrait.focus-watch {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "watch"
+      "chat"
+      "utility";
+  }
+
+  .studio-layout.watch-portrait .chat-rail {
+    grid-template-columns: 1fr;
+  }
+
   .page-shell,
   .room-shell {
     width: min(100% - 24px, 100%);
@@ -1148,14 +1215,3 @@ button:disabled {
     border-radius: 24px;
   }
 }
-
-
-
-
-
-
-
-
-
-
-

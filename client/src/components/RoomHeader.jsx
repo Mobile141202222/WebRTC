@@ -1,4 +1,4 @@
-﻿import { CheckIcon, CopyIcon } from './Icons.jsx';
+﻿import { CheckIcon, CopyIcon, SendIcon } from './Icons.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 
 function describeRoomMode(roomMediaMode) {
@@ -9,20 +9,50 @@ function RoomHeader({
   copyState,
   inviteLink,
   onCopyInvite,
+  onCopyRoomId,
+  onShareInvite,
   onToggleTheme,
   participantCount,
+  roomCodeState,
   roomId,
   roomMediaMode,
+  shareState,
   theme,
 }) {
-  const copied = copyState === 'Copied';
+  const copiedLink = copyState === 'Copied';
+  const copiedRoom = roomCodeState === 'Copied';
+  const shared = shareState === 'Shared';
 
   return (
     <header className="room-banner card elevated-card">
       <div className="room-title-row">
-        <div className="heading-group">
+        <div className="heading-group room-heading-stack">
           <span className="eyebrow">Room</span>
-          <h1>{roomId}</h1>
+          <div className="room-code-row">
+            <h1>{roomId}</h1>
+            <div className="room-code-actions">
+              <button
+                aria-label={roomCodeState}
+                className="secondary-button icon-button"
+                onClick={onCopyRoomId}
+                title={roomCodeState}
+                type="button"
+              >
+                {copiedRoom ? <CheckIcon /> : <CopyIcon />}
+                <span className="sr-only">{roomCodeState}</span>
+              </button>
+              <button
+                aria-label={shareState}
+                className="secondary-button icon-button"
+                onClick={onShareInvite}
+                title={shareState}
+                type="button"
+              >
+                {shared ? <CheckIcon /> : <SendIcon />}
+                <span className="sr-only">{shareState}</span>
+              </button>
+            </div>
+          </div>
         </div>
         <ThemeToggle onToggleTheme={onToggleTheme} theme={theme} />
       </div>
@@ -33,8 +63,11 @@ function RoomHeader({
       </div>
 
       <div className="invite-panel compact-panel">
-        <div className="invite-row compact-row">
-          <input aria-label="Invite link" id="invite-link" readOnly value={inviteLink} />
+        <span className="field-label invite-label">Share link</span>
+        <div className="invite-row compact-row invite-compact-row">
+          <div aria-label="Invite link" className="invite-link-frame" id="invite-link" title={inviteLink}>
+            {inviteLink}
+          </div>
           <button
             aria-label={copyState}
             className="secondary-button icon-button"
@@ -42,7 +75,7 @@ function RoomHeader({
             title={copyState}
             type="button"
           >
-            {copied ? <CheckIcon /> : <CopyIcon />}
+            {copiedLink ? <CheckIcon /> : <CopyIcon />}
             <span className="sr-only">{copyState}</span>
           </button>
         </div>
