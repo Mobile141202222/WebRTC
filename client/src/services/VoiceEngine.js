@@ -26,6 +26,14 @@ function stopStream(stream) {
   }
 }
 
+function buildParticipantMediaKey(participant) {
+  return [
+    participant.peerId || '',
+    participant.videoEnabled ? 'video' : 'audio',
+    participant.screenSharing ? 'screen' : 'camera',
+  ].join(':');
+}
+
 export class VoiceEngine {
   constructor(callbacks = {}) {
     this.callbacks = callbacks;
@@ -359,9 +367,8 @@ export class VoiceEngine {
   }
 
   resetConnections() {
-    for (const [participantId, activeCall] of this.calls.entries()) {
-      activeCall.close();
-      this.callbacks.onRemoteDisconnect?.(participantId);
+    for (const record of this.calls.values()) {
+      record.call.close();
     }
 
     this.calls.clear();
@@ -376,9 +383,10 @@ export class VoiceEngine {
     try {
       const stream = await this.ensureLocalStream({ mediaMode: this.localMediaMode });
       const remoteParticipantId = call.metadata?.participantId || call.peer;
+      const mediaKey = call.metadata?.mediaKey || remoteParticipantId;
 
       call.answer(stream);
-      this.attachCall(remoteParticipantId, call);
+      this.attachCall(remoteParticipantId, call, mediaKey);
       this.callbacks.onStatusChange?.('Media live');
     } catch (error) {
       this.callbacks.onError?.(error);
@@ -398,6 +406,13 @@ export class VoiceEngine {
       }
 
       activeParticipants.add(participant.id);
+      const mediaKey = buildParticipantMediaKey(participant);
+      const existingRecord = this.calls.get(participant.id);
+
+      if (existingRecord && existingRecord.mediaKey !== mediaKey) {
+        existingRecord.call.close();
+        this.calls.delete(participant.id);
+      }
 
       if (this.calls.has(participant.id)) {
         continue;
@@ -411,13 +426,14 @@ export class VoiceEngine {
         const stream = await this.ensureLocalStream({ mediaMode: this.localMediaMode });
         const outgoingCall = this.peer.call(participant.peerId, stream, {
           metadata: {
+            mediaKey,
             mediaMode: this.localMediaMode,
             participantId: selfParticipantId,
           },
         });
 
         if (outgoingCall) {
-          this.attachCall(participant.id, outgoingCall);
+          this.attachCall(participant.id, outgoingCall, mediaKey);
           this.callbacks.onStatusChange?.('Media live');
         }
       } catch (error) {
@@ -425,12 +441,12 @@ export class VoiceEngine {
       }
     }
 
-    for (const [participantId, activeCall] of this.calls.entries()) {
+    for (const [participantId, record] of this.calls.entries()) {
       if (activeParticipants.has(participantId)) {
         continue;
       }
 
-      activeCall.close();
+      record.call.close();
       this.calls.delete(participantId);
     }
   }
@@ -493,14 +509,17 @@ export class VoiceEngine {
     this.deviceChangeHandler = null;
   }
 
-  attachCall(participantId, call) {
-    const currentCall = this.calls.get(participantId);
+  attachCall(participantId, call, mediaKey = participantId) {
+    const currentRecord = this.calls.get(participantId);
 
-    if (currentCall && currentCall !== call) {
-      currentCall.close();
+    if (currentRecord && currentRecord.call !== call) {
+      currentRecord.call.close();
     }
 
-    this.calls.set(participantId, call);
+    this.calls.set(participantId, {
+      call,
+      mediaKey,
+    });
 
     call.on('stream', (stream) => {
       this.callbacks.onRemoteStream?.({
@@ -510,7 +529,9 @@ export class VoiceEngine {
     });
 
     call.on('close', () => {
-      if (this.calls.get(participantId) === call) {
+      const current = this.calls.get(participantId);
+
+      if (current?.call === call) {
         this.calls.delete(participantId);
       }
 

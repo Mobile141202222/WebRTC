@@ -25,7 +25,8 @@
 .exit-card,
 .watch-party-card,
 .watch-party-form,
-.modal-card {
+.modal-card,
+.presence-copy {
   display: grid;
   gap: 14px;
 }
@@ -49,7 +50,9 @@
 .watch-party-input-row,
 .watch-party-toolbar,
 .modal-actions,
-.modal-summary {
+.modal-summary,
+.featured-share-footer,
+.presence-card {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -60,8 +63,41 @@
 .room-title-row,
 .invite-row,
 .media-caption,
-.participant-card {
+.participant-card,
+.featured-share-footer {
   justify-content: space-between;
+}
+
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panel-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-shell {
+  min-width: 0;
+}
+
+.panel-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: #08111f;
+}
+
+.panel-shell:fullscreen .card {
+  min-height: calc(100vh - 48px);
+  margin: 0;
 }
 
 .page-topbar,
@@ -120,7 +156,9 @@
 .media-avatar,
 .modal-card,
 .watch-party-player-shell,
-.audio-meter-bar {
+.audio-meter-bar,
+.presence-card,
+.featured-share-surface {
   border: 1px solid var(--border-soft);
 }
 
@@ -137,7 +175,8 @@
 .participant-chip,
 .media-badge,
 .modal-card,
-.watch-party-player-shell {
+.watch-party-player-shell,
+.presence-card {
   background: var(--panel-strong);
 }
 
@@ -192,7 +231,9 @@
 .brand-lockup p,
 .message-author,
 .watch-party-empty p,
-.modal-card p {
+.modal-card p,
+.presence-copy span,
+.featured-share-footer span {
   color: var(--text-muted);
 }
 
@@ -263,7 +304,8 @@
 .landing-grid,
 .room-layout,
 .media-grid,
-.choice-grid {
+.choice-grid,
+.presence-strip {
   display: grid;
   gap: 18px;
 }
@@ -275,6 +317,22 @@
 .refined-room-layout {
   grid-template-columns: minmax(0, 1.64fr) minmax(300px, 0.96fr);
   align-items: start;
+}
+
+.refined-room-layout.focus-stage,
+.refined-room-layout.focus-watch {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.refined-room-layout.focus-stage .primary-column,
+.refined-room-layout.focus-watch .primary-column {
+  gap: 22px;
+}
+
+.refined-room-layout.focus-stage .sidebar-column,
+.refined-room-layout.focus-watch .sidebar-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .choice-grid {
@@ -462,6 +520,10 @@ button:disabled {
   gap: 18px;
 }
 
+.share-priority-stage {
+  gap: 22px;
+}
+
 .stage-empty,
 .watch-party-empty {
   min-height: 180px;
@@ -475,6 +537,85 @@ button:disabled {
 
 .media-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.featured-share-tile {
+  display: grid;
+  gap: 14px;
+}
+
+.featured-share-surface {
+  min-height: min(58vh, 680px);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.featured-share-surface video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #08111f;
+}
+
+.featured-share-placeholder {
+  min-height: min(58vh, 680px);
+}
+
+.featured-share-footer {
+  padding: 0 4px;
+}
+
+.featured-share-footer > div {
+  display: grid;
+  gap: 4px;
+}
+
+.featured-share-tile.speaking .featured-share-surface {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14), var(--shadow-soft);
+}
+
+.presence-strip {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.presence-card {
+  min-height: 74px;
+  padding: 12px 14px;
+  border-radius: 22px;
+  background: var(--panel-muted);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.presence-card.speaking {
+  border-color: rgba(34, 197, 94, 0.28);
+  box-shadow: 0 10px 28px rgba(34, 197, 94, 0.08);
+}
+
+.presence-avatar {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+}
+
+.presence-avatar.active {
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12), 0 10px 24px rgba(34, 197, 94, 0.18);
+}
+
+.presence-dot {
+  margin-left: auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.presence-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12);
 }
 
 .media-tile,
@@ -678,7 +819,7 @@ button:disabled {
 }
 
 .watch-party-player-shell {
-  min-height: 280px;
+  min-height: 320px;
   border-radius: 26px;
   overflow: hidden;
   background: #0f172a;
@@ -688,7 +829,7 @@ button:disabled {
 .watch-party-player iframe {
   width: 100%;
   height: 100%;
-  min-height: 280px;
+  min-height: 320px;
 }
 
 .watch-party-toolbar {
@@ -697,6 +838,22 @@ button:disabled {
 
 .watch-party-input-row {
   align-items: stretch;
+}
+
+.stage-shell.is-focused .featured-share-surface,
+.stage-shell.is-focused .featured-share-placeholder {
+  min-height: min(82vh, 960px);
+}
+
+.watch-shell.is-focused .watch-party-player-shell,
+.watch-shell.is-focused .watch-party-player,
+.watch-shell.is-focused .watch-party-player iframe {
+  min-height: min(76vh, 900px);
+}
+
+.watch-shell.is-focused .watch-party-card,
+.stage-shell.is-focused .media-stage {
+  padding: 28px;
 }
 
 .modal-backdrop {
@@ -774,8 +931,7 @@ button:disabled {
   .hero-grid,
   .landing-grid-compact,
   .refined-room-layout,
-  .choice-grid,
-  .watch-party-input-row {
+  .choice-grid {
     grid-template-columns: 1fr;
   }
 
@@ -785,9 +941,35 @@ button:disabled {
   .invite-row,
   .participant-card,
   .media-caption,
-  .watch-party-input-row {
+  .watch-party-input-row,
+  .featured-share-footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .presence-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-head-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .refined-room-layout.focus-stage .sidebar-column,
+  .refined-room-layout.focus-watch .sidebar-column {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-shell.is-focused .featured-share-surface,
+  .stage-shell.is-focused .featured-share-placeholder {
+    min-height: 56vh;
+  }
+
+  .watch-shell.is-focused .watch-party-player-shell,
+  .watch-shell.is-focused .watch-party-player,
+  .watch-shell.is-focused .watch-party-player iframe {
+    min-height: 52vh;
   }
 
   .message-card {
@@ -798,6 +980,11 @@ button:disabled {
     width: 100%;
     margin-left: 0;
     justify-content: space-between;
+  }
+
+  .featured-share-surface,
+  .featured-share-placeholder {
+    min-height: 44vh;
   }
 
   .watch-party-player-shell,
@@ -817,3 +1004,5 @@ button:disabled {
     min-height: 210px;
   }
 }
+
+

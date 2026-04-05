@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
+import { CollapseWideIcon, ExpandWideIcon, FullscreenIcon } from './Icons.jsx';
 
 function getInitials(label = '') {
   const [first = '?', second = ''] = label.trim().split(/\s+/);
@@ -93,65 +94,195 @@ function AudioLevelMeter({ level }) {
   );
 }
 
-function MediaTile({ label, muted = false, role, screenSharing = false, stream }) {
+function PanelControls({ isExpanded, onToggleExpand, onToggleFullscreen }) {
+  return (
+    <div className="panel-zoom-controls">
+      <button
+        aria-label={isExpanded ? 'Reduce panel size' : 'Expand panel'}
+        className="secondary-button icon-button control-icon"
+        onClick={onToggleExpand}
+        title={isExpanded ? 'Reduce' : 'Expand'}
+        type="button"
+      >
+        {isExpanded ? <CollapseWideIcon /> : <ExpandWideIcon />}
+      </button>
+      <button
+        aria-label="Fullscreen"
+        className="secondary-button icon-button control-icon"
+        onClick={onToggleFullscreen}
+        title="Fullscreen"
+        type="button"
+      >
+        <FullscreenIcon />
+      </button>
+    </div>
+  );
+}
+
+function FeaturedTile({ entry }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
-  const hasVideoTrack = (stream?.getVideoTracks() || []).length > 0;
-  const level = useAudioLevel(stream);
+  const hasVideoTrack = (entry.stream?.getVideoTracks() || []).length > 0;
+  const level = useAudioLevel(entry.stream);
   const isSpeaking = level > 0.12;
 
   useEffect(() => {
-    if (!stream) {
+    if (!entry.stream) {
       return;
     }
 
     if (hasVideoTrack && videoRef.current) {
-      videoRef.current.srcObject = stream;
+      videoRef.current.srcObject = entry.stream;
       return;
     }
 
     if (audioRef.current) {
-      audioRef.current.srcObject = stream;
+      audioRef.current.srcObject = entry.stream;
     }
-  }, [hasVideoTrack, stream]);
+  }, [entry.stream, hasVideoTrack]);
 
   return (
-    <article className={`media-tile ${hasVideoTrack ? 'video' : 'audio'} ${isSpeaking ? 'speaking' : ''}`}>
-      <div className="media-surface">
+    <article className={`featured-share-tile ${isSpeaking ? 'speaking' : ''}`}>
+      <div className="featured-share-surface">
         {hasVideoTrack ? (
-          <video autoPlay muted={muted} playsInline ref={videoRef} />
+          <video autoPlay muted={entry.muted} playsInline ref={videoRef} />
         ) : (
-          <div className="media-placeholder">
-            <span className="media-avatar premium-avatar">{getInitials(label)}</span>
+          <div className="media-placeholder featured-share-placeholder">
+            <span className="media-avatar premium-avatar">{getInitials(entry.label)}</span>
           </div>
         )}
-        {!hasVideoTrack && stream ? <audio autoPlay muted={muted} playsInline ref={audioRef} /> : null}
+        {!hasVideoTrack && entry.stream ? <audio autoPlay muted={entry.muted} playsInline ref={audioRef} /> : null}
       </div>
-      <div className="media-caption media-caption-extended">
+      <div className="featured-share-footer">
         <div>
-          <strong>{label}</strong>
-          <span>{role}</span>
+          <strong>{entry.label}</strong>
+          <span>{entry.screenSharing ? 'Screen share' : entry.role}</span>
         </div>
         <div className="media-side-meta">
           <AudioLevelMeter level={level} />
-          <span className="media-badge">{screenSharing ? 'Screen' : hasVideoTrack ? 'Video' : 'Audio'}</span>
+          <span className="media-badge">{entry.screenSharing ? 'Screen live' : hasVideoTrack ? 'Video' : 'Audio'}</span>
         </div>
       </div>
     </article>
   );
 }
 
+function CompactPresenceCard({ entry }) {
+  const level = useAudioLevel(entry.stream);
+  const isSpeaking = level > 0.12;
+
+  return (
+    <article className={`presence-card ${isSpeaking ? 'speaking' : ''}`}>
+      <span className={`presence-avatar premium-avatar ${isSpeaking ? 'active' : ''}`}>
+        {getInitials(entry.label)}
+      </span>
+      <div className="presence-copy">
+        <strong>{entry.label}</strong>
+        <span>{entry.screenSharing ? 'Sharing' : entry.role}</span>
+      </div>
+      <span className={`presence-dot ${isSpeaking ? 'active' : ''}`} />
+    </article>
+  );
+}
+
+function StandardTile({ entry }) {
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const hasVideoTrack = (entry.stream?.getVideoTracks() || []).length > 0;
+  const level = useAudioLevel(entry.stream);
+  const isSpeaking = level > 0.12;
+
+  useEffect(() => {
+    if (!entry.stream) {
+      return;
+    }
+
+    if (hasVideoTrack && videoRef.current) {
+      videoRef.current.srcObject = entry.stream;
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.srcObject = entry.stream;
+    }
+  }, [entry.stream, hasVideoTrack]);
+
+  return (
+    <article className={`media-tile ${hasVideoTrack ? 'video' : 'audio'} ${isSpeaking ? 'speaking' : ''}`}>
+      <div className="media-surface">
+        {hasVideoTrack ? (
+          <video autoPlay muted={entry.muted} playsInline ref={videoRef} />
+        ) : (
+          <div className="media-placeholder">
+            <span className="media-avatar premium-avatar">{getInitials(entry.label)}</span>
+          </div>
+        )}
+        {!hasVideoTrack && entry.stream ? <audio autoPlay muted={entry.muted} playsInline ref={audioRef} /> : null}
+      </div>
+      <div className="media-caption media-caption-extended">
+        <div>
+          <strong>{entry.label}</strong>
+          <span>{entry.role}</span>
+        </div>
+        <div className="media-side-meta">
+          <AudioLevelMeter level={level} />
+          <span className="media-badge">{entry.screenSharing ? 'Screen' : hasVideoTrack ? 'Video' : 'Audio'}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function buildEntries({ localScreenSharing, localStream, participants, remoteStreams }) {
+  const entries = [];
+
+  if (localStream) {
+    entries.push({
+      id: 'local',
+      label: 'You',
+      muted: true,
+      role: localScreenSharing ? 'Screen share' : 'Local',
+      screenSharing: localScreenSharing,
+      stream: localStream,
+    });
+  }
+
+  for (const remoteStream of remoteStreams) {
+    const participant = participants.find((entry) => entry.id === remoteStream.participantId);
+
+    entries.push({
+      id: remoteStream.participantId,
+      label: participant?.name || 'Guest',
+      muted: false,
+      role: participant?.screenSharing ? 'Screen share' : 'Remote',
+      screenSharing: Boolean(participant?.screenSharing),
+      stream: remoteStream.stream,
+    });
+  }
+
+  return entries;
+}
+
 function AudioStreamRack({
+  isExpanded = false,
   localScreenSharing = false,
   localStream,
   mediaMode,
+  onToggleExpand,
+  onToggleFullscreen,
   participants,
   remoteStreams,
 }) {
-  const liveCount = remoteStreams.length + (localStream ? 1 : 0);
-  const hasRemoteStreams = remoteStreams.length > 0;
+  const entries = buildEntries({
+    localScreenSharing,
+    localStream,
+    participants,
+    remoteStreams,
+  });
+  const liveCount = entries.length;
+  const featuredEntry = entries.find((entry) => entry.screenSharing) || null;
 
-  if (!localStream && !hasRemoteStreams) {
+  if (entries.length === 0) {
     return (
       <section className="card media-stage empty elevated-card">
         <div className="panel-head">
@@ -159,11 +290,51 @@ function AudioStreamRack({
             <span className="eyebrow">Stage</span>
             <h2>Waiting for stream</h2>
           </div>
-          <span className="count-badge">{mediaMode === 'video' ? 'Video' : 'Voice'}</span>
+          <div className="panel-head-actions">
+            <span className="count-badge">{mediaMode === 'video' ? 'Video' : 'Voice'}</span>
+            <PanelControls
+              isExpanded={isExpanded}
+              onToggleExpand={onToggleExpand}
+              onToggleFullscreen={onToggleFullscreen}
+            />
+          </div>
         </div>
         <div className="stage-empty">
           <p className="muted">{mediaMode === 'video' ? 'เปิด mic หรือ camera เมื่อพร้อม' : 'เปิด mic เพื่อเริ่มคุย'}</p>
         </div>
+      </section>
+    );
+  }
+
+  if (featuredEntry) {
+    const audienceEntries = entries.filter((entry) => entry.id !== featuredEntry.id);
+
+    return (
+      <section className="card media-stage elevated-card share-priority-stage">
+        <div className="panel-head">
+          <div className="heading-group">
+            <span className="eyebrow">Stage</span>
+            <h2>Shared screen</h2>
+          </div>
+          <div className="panel-head-actions">
+            <span className="count-badge">{liveCount}</span>
+            <PanelControls
+              isExpanded={isExpanded}
+              onToggleExpand={onToggleExpand}
+              onToggleFullscreen={onToggleFullscreen}
+            />
+          </div>
+        </div>
+
+        <FeaturedTile entry={featuredEntry} />
+
+        {audienceEntries.length ? (
+          <div className="presence-strip">
+            {audienceEntries.map((entry) => (
+              <CompactPresenceCard entry={entry} key={entry.id} />
+            ))}
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -175,35 +346,20 @@ function AudioStreamRack({
           <span className="eyebrow">Stage</span>
           <h2>{mediaMode === 'video' ? 'Live media' : 'Live audio'}</h2>
         </div>
-        <span className="count-badge">{liveCount}</span>
+        <div className="panel-head-actions">
+          <span className="count-badge">{liveCount}</span>
+          <PanelControls
+            isExpanded={isExpanded}
+            onToggleExpand={onToggleExpand}
+            onToggleFullscreen={onToggleFullscreen}
+          />
+        </div>
       </div>
 
       <div className="media-grid">
-        {localStream ? (
-          <MediaTile
-            label="You"
-            muted
-            role={localScreenSharing ? 'Screen share' : 'Local'}
-            screenSharing={localScreenSharing}
-            stream={localStream}
-          />
-        ) : null}
-
-        {remoteStreams.map((remoteStream) => {
-          const participant = participants.find(
-            (entry) => entry.id === remoteStream.participantId,
-          );
-
-          return (
-            <MediaTile
-              key={remoteStream.participantId}
-              label={participant?.name || 'Guest'}
-              role={participant?.screenSharing ? 'Screen share' : 'Remote'}
-              screenSharing={participant?.screenSharing}
-              stream={remoteStream.stream}
-            />
-          );
-        })}
+        {entries.map((entry) => (
+          <StandardTile entry={entry} key={entry.id} />
+        ))}
       </div>
     </section>
   );

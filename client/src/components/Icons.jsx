@@ -219,3 +219,48 @@ export function CloseIcon(props) {
     </IconBase>
   );
 }
+
+export function ExpandWideIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 8V5h3" />
+      <path d="M20 8V5h-3" />
+      <path d="M4 16v3h3" />
+      <path d="M20 16v3h-3" />
+      <path d="m8 5-4 4" />
+      <path d="m16 5 4 4" />
+      <path d="m8 19-4-4" />
+      <path d="m16 19 4-4" />
+    </IconBase>
+  );
+}
+
+export function CollapseWideIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 8V5H5" />
+      <path d="M16 8V5h3" />
+      <path d="M8 16v3H5" />
+      <path d="M16 16v3h3" />
+      <path d="m5 5 3 3" />
+      <path d="m19 5-3 3" />
+      <path d="m5 19 3-3" />
+      <path d="m19 19-3-3" />
+    </IconBase>
+  );
+}
+
+export function FullscreenIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 3H3v5" />
+      <path d="M16 3h5v5" />
+      <path d="M8 21H3v-5" />
+      <path d="M16 21h5v-5" />
+      <path d="M3 3l6 6" />
+      <path d="m21 3-6 6" />
+      <path d="m3 21 6-6" />
+      <path d="m21 21-6-6" />
+    </IconBase>
+  );
+}

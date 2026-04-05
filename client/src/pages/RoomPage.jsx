@@ -32,6 +32,8 @@ function RoomPage({ onToggleTheme, theme }) {
   const [searchParams] = useSearchParams();
   const participantIdRef = useRef(createParticipantId());
   const voiceEngineRef = useRef(null);
+  const stagePanelRef = useRef(null);
+  const watchPanelRef = useRef(null);
 
   const roomId = sanitizeRoomId(routeRoomId);
   const requestedMediaMode = searchParams.get('mode') === 'video' ? 'video' : 'voice';
@@ -68,6 +70,7 @@ function RoomPage({ onToggleTheme, theme }) {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [watchParty, setWatchParty] = useState(null);
+  const [focusedPanel, setFocusedPanel] = useState(null);
 
   const inviteLink = `${window.location.origin}/room/${roomId}`;
   const selfParticipant = {
@@ -79,6 +82,9 @@ function RoomPage({ onToggleTheme, theme }) {
     screenSharing,
     videoEnabled: cameraEnabled,
   };
+  const watchPartyPriority = Boolean(watchParty?.videoId && watchParty?.status === 'playing');
+  const layoutFocus = focusedPanel || (watchPartyPriority ? 'watch' : null);
+  const showWatchFirst = watchPartyPriority || layoutFocus === 'watch';
 
   function applyLocalState(localState) {
     setMuted(!localState.audioEnabled);
@@ -100,6 +106,19 @@ function RoomPage({ onToggleTheme, theme }) {
       participants,
       participantIdRef.current,
     );
+  }
+
+  async function toggleFullscreen(targetRef) {
+    if (!targetRef.current) {
+      return;
+    }
+
+    if (document.fullscreenElement === targetRef.current) {
+      await document.exitFullscreen?.();
+      return;
+    }
+
+    await targetRef.current.requestFullscreen?.();
   }
 
   const onRemoteStream = useEffectEvent(({ participantId, stream }) => {
@@ -127,6 +146,17 @@ function RoomPage({ onToggleTheme, theme }) {
   const onDevicesChanged = useEffectEvent((nextDevices) => {
     setAvailableDevices(nextDevices);
   });
+
+  useEffect(() => {
+    if (watchPartyPriority) {
+      setFocusedPanel('watch');
+      return;
+    }
+
+    if (!watchParty?.videoId) {
+      setFocusedPanel((currentFocus) => (currentFocus === 'watch' ? null : currentFocus));
+    }
+  }, [watchParty?.videoId, watchPartyPriority]);
 
   useEffect(() => {
     if (!roomId) {
@@ -169,6 +199,7 @@ function RoomPage({ onToggleTheme, theme }) {
     setAvailableDevices({ audioInputs: [], videoInputs: [] });
     setSelectedDevices({ audioInputId: '', videoInputId: '' });
     setWatchParty(null);
+    setFocusedPanel(null);
 
     async function bootRoom() {
       let peerId = '';
@@ -533,6 +564,45 @@ function RoomPage({ onToggleTheme, theme }) {
     );
   }
 
+  const stagePanel = (
+    <div
+      className={`panel-shell stage-shell ${layoutFocus === 'stage' ? 'is-focused' : ''}`}
+      ref={stagePanelRef}
+    >
+      <AudioStreamRack
+        isExpanded={layoutFocus === 'stage'}
+        localScreenSharing={screenSharing}
+        localStream={localStream}
+        mediaMode={roomMediaMode}
+        onToggleExpand={() => setFocusedPanel((current) => (current === 'stage' ? null : 'stage'))}
+        onToggleFullscreen={() => {
+          void toggleFullscreen(stagePanelRef);
+        }}
+        participants={participants}
+        remoteStreams={remoteStreams}
+      />
+    </div>
+  );
+
+  const watchPanel = (
+    <div
+      className={`panel-shell watch-shell ${layoutFocus === 'watch' ? 'is-focused' : ''}`}
+      ref={watchPanelRef}
+    >
+      <WatchPartyPanel
+        isExpanded={layoutFocus === 'watch'}
+        onClear={handleClearWatchParty}
+        onSyncState={handleSyncWatchParty}
+        onToggleExpand={() => setFocusedPanel((current) => (current === 'watch' ? null : 'watch'))}
+        onToggleFullscreen={() => {
+          void toggleFullscreen(watchPanelRef);
+        }}
+        participantId={participantIdRef.current}
+        watchParty={watchParty}
+      />
+    </div>
+  );
+
   return (
     <>
       <main className="room-page page-shell room-shell">
@@ -551,21 +621,10 @@ function RoomPage({ onToggleTheme, theme }) {
         {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
         {isBooting ? <p className="feedback">Connecting...</p> : null}
 
-        <div className="room-layout refined-room-layout">
+        <div className={`room-layout refined-room-layout ${layoutFocus ? `focus-${layoutFocus}` : ''}`}>
           <div className="primary-column">
-            <AudioStreamRack
-              localScreenSharing={screenSharing}
-              localStream={localStream}
-              mediaMode={roomMediaMode}
-              participants={participants}
-              remoteStreams={remoteStreams}
-            />
-            <WatchPartyPanel
-              onClear={handleClearWatchParty}
-              onSyncState={handleSyncWatchParty}
-              participantId={participantIdRef.current}
-              watchParty={watchParty}
-            />
+            {showWatchFirst ? watchPanel : stagePanel}
+            {showWatchFirst ? stagePanel : watchPanel}
             <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
               <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
             </ChatProvider>
@@ -624,3 +683,5 @@ function RoomPage({ onToggleTheme, theme }) {
 }
 
 export default RoomPage;
+
+

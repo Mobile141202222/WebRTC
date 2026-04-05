@@ -1,5 +1,14 @@
 ﻿import { useEffect, useRef, useState } from 'react';
-import { LinkIcon, PauseIcon, PlayIcon, RefreshIcon, TrashIcon } from './Icons.jsx';
+import {
+  CollapseWideIcon,
+  ExpandWideIcon,
+  FullscreenIcon,
+  LinkIcon,
+  PauseIcon,
+  PlayIcon,
+  RefreshIcon,
+  TrashIcon,
+} from './Icons.jsx';
 
 const YOUTUBE_SCRIPT_SRC = 'https://www.youtube.com/iframe_api';
 let youtubeApiPromise = null;
@@ -82,7 +91,40 @@ function getSyncedPosition(watchParty) {
   return Math.max(0, basePosition + (Date.now() - syncedAt) / 1000);
 }
 
-function WatchPartyPanel({ onClear, onSyncState, participantId, watchParty }) {
+function PanelControls({ isExpanded, onToggleExpand, onToggleFullscreen }) {
+  return (
+    <div className="panel-zoom-controls">
+      <button
+        aria-label={isExpanded ? 'Reduce panel size' : 'Expand panel'}
+        className="secondary-button icon-button control-icon"
+        onClick={onToggleExpand}
+        title={isExpanded ? 'Reduce' : 'Expand'}
+        type="button"
+      >
+        {isExpanded ? <CollapseWideIcon /> : <ExpandWideIcon />}
+      </button>
+      <button
+        aria-label="Fullscreen"
+        className="secondary-button icon-button control-icon"
+        onClick={onToggleFullscreen}
+        title="Fullscreen"
+        type="button"
+      >
+        <FullscreenIcon />
+      </button>
+    </div>
+  );
+}
+
+function WatchPartyPanel({
+  isExpanded = false,
+  onClear,
+  onSyncState,
+  onToggleExpand,
+  onToggleFullscreen,
+  participantId,
+  watchParty,
+}) {
   const [draftUrl, setDraftUrl] = useState(watchParty?.sourceUrl || '');
   const [panelError, setPanelError] = useState('');
   const [playerReady, setPlayerReady] = useState(false);
@@ -316,7 +358,14 @@ function WatchPartyPanel({ onClear, onSyncState, participantId, watchParty }) {
           <span className="eyebrow">Watch party</span>
           <h2>Shared video</h2>
         </div>
-        <span className="count-badge">{watchParty?.videoId ? 'Live' : 'Idle'}</span>
+        <div className="panel-head-actions">
+          <span className="count-badge">{watchParty?.videoId ? 'Live' : 'Idle'}</span>
+          <PanelControls
+            isExpanded={isExpanded}
+            onToggleExpand={onToggleExpand}
+            onToggleFullscreen={onToggleFullscreen}
+          />
+        </div>
       </div>
 
       <form className="watch-party-form" onSubmit={handleSubmit}>
@@ -387,4 +436,3 @@ function WatchPartyPanel({ onClear, onSyncState, participantId, watchParty }) {
 }
 
 export default WatchPartyPanel;
-
