@@ -82,9 +82,11 @@ function RoomPage({ onToggleTheme, theme }) {
     screenSharing,
     videoEnabled: cameraEnabled,
   };
+  const watchPartyActive = Boolean(watchParty?.videoId);
   const watchPartyPriority = Boolean(watchParty?.videoId && watchParty?.status === 'playing');
   const layoutFocus = focusedPanel || (watchPartyPriority ? 'watch' : null);
-  const showWatchFirst = watchPartyPriority || layoutFocus === 'watch';
+  const showWatchFirst = layoutFocus === 'watch' || (watchPartyActive && layoutFocus !== 'stage');
+  const stageInRail = watchPartyActive && layoutFocus !== 'stage';
 
   function applyLocalState(localState) {
     setMuted(!localState.audioEnabled);
@@ -566,7 +568,7 @@ function RoomPage({ onToggleTheme, theme }) {
 
   const stagePanel = (
     <div
-      className={`panel-shell stage-shell ${layoutFocus === 'stage' ? 'is-focused' : ''}`}
+      className={`panel-shell stage-shell ${layoutFocus === 'stage' ? 'is-focused' : ''} ${stageInRail ? 'rail-mode' : ''}`}
       ref={stagePanelRef}
     >
       <AudioStreamRack
@@ -621,45 +623,55 @@ function RoomPage({ onToggleTheme, theme }) {
         {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
         {isBooting ? <p className="feedback">Connecting...</p> : null}
 
-        <div className={`room-layout refined-room-layout ${layoutFocus ? `focus-${layoutFocus}` : ''}`}>
-          <div className="primary-column">
+        <div className={`room-layout refined-room-layout studio-layout ${layoutFocus ? `focus-${layoutFocus}` : ''} ${watchPartyActive ? 'watch-active' : ''}`}>
+          <aside className="chat-rail">
+            {stageInRail ? stagePanel : null}
+            <div className="chat-slot">
+              <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
+                <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
+              </ChatProvider>
+            </div>
+          </aside>
+
+          <div className={`primary-column main-stage-column ${showWatchFirst ? 'watch-dominant' : 'stage-dominant'}`}>
             {showWatchFirst ? watchPanel : stagePanel}
-            {showWatchFirst ? stagePanel : watchPanel}
-            <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
-              <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
-            </ChatProvider>
+            {!stageInRail ? (showWatchFirst ? stagePanel : watchPanel) : null}
           </div>
 
-          <aside className="sidebar-column">
-            <RoomConsole
-              cameraAvailable={cameraAvailable}
-              cameraEnabled={cameraEnabled}
-              mediaConnected={Boolean(selfPeerId && localStream)}
-              muted={muted}
-              onLeave={handleLeave}
-              onOpenSettings={() => {
-                void handleRefreshDevices();
-                setSettingsOpen(true);
-              }}
-              onToggleCamera={() => {
-                void handleToggleCamera();
-              }}
-              onToggleMute={() => {
-                void handleToggleMute();
-              }}
-              onToggleScreenShare={() => {
-                void handleToggleScreenShare();
-              }}
-              roomMediaMode={roomMediaMode}
-              screenShareSupported={screenShareSupported}
-              screenSharing={screenSharing}
-              voiceStatus={voiceStatus}
-            />
-            <ParticipantsPanel
-              participants={participants.length ? participants : [selfParticipant]}
-              roomMediaMode={roomMediaMode}
-              selfParticipantId={participantIdRef.current}
-            />
+          <aside className="sidebar-column utility-column">
+            <div className="console-slot">
+              <RoomConsole
+                cameraAvailable={cameraAvailable}
+                cameraEnabled={cameraEnabled}
+                mediaConnected={Boolean(selfPeerId && localStream)}
+                muted={muted}
+                onLeave={handleLeave}
+                onOpenSettings={() => {
+                  void handleRefreshDevices();
+                  setSettingsOpen(true);
+                }}
+                onToggleCamera={() => {
+                  void handleToggleCamera();
+                }}
+                onToggleMute={() => {
+                  void handleToggleMute();
+                }}
+                onToggleScreenShare={() => {
+                  void handleToggleScreenShare();
+                }}
+                roomMediaMode={roomMediaMode}
+                screenShareSupported={screenShareSupported}
+                screenSharing={screenSharing}
+                voiceStatus={voiceStatus}
+              />
+            </div>
+            <div className="people-slot">
+              <ParticipantsPanel
+                participants={participants.length ? participants : [selfParticipant]}
+                roomMediaMode={roomMediaMode}
+                selfParticipantId={participantIdRef.current}
+              />
+            </div>
           </aside>
         </div>
       </main>
@@ -683,5 +695,14 @@ function RoomPage({ onToggleTheme, theme }) {
 }
 
 export default RoomPage;
+
+
+
+
+
+
+
+
+
 
 

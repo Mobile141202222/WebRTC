@@ -1,7 +1,11 @@
 ﻿.page-shell {
-  width: min(1180px, calc(100% - 32px));
+  width: min(1440px, calc(100vw - 28px));
   margin: 0 auto;
-  padding: 28px 0 44px;
+  padding: 20px 0 28px;
+}
+
+.room-shell {
+  width: min(1920px, calc(100vw - 24px));
 }
 
 .landing-page,
@@ -98,6 +102,16 @@
 .panel-shell:fullscreen .card {
   min-height: calc(100vh - 48px);
   margin: 0;
+}
+
+.panel-shell:fullscreen .watch-party-player-shell,
+.panel-shell:fullscreen .watch-party-player,
+.panel-shell:fullscreen .watch-party-player iframe,
+.panel-shell:fullscreen .featured-share-surface,
+.panel-shell:fullscreen .featured-share-placeholder,
+.panel-shell:fullscreen .media-surface {
+  aspect-ratio: auto;
+  min-height: calc(100vh - 220px);
 }
 
 .page-topbar,
@@ -315,24 +329,110 @@
 }
 
 .refined-room-layout {
-  grid-template-columns: minmax(0, 1.64fr) minmax(300px, 0.96fr);
+  grid-template-columns: clamp(300px, 19vw, 360px) minmax(0, 1fr) clamp(300px, 19vw, 360px);
+  grid-template-areas: "chat main utility";
+  align-items: start;
+  gap: 18px;
+}
+
+.studio-layout {
   align-items: start;
 }
 
-.refined-room-layout.focus-stage,
-.refined-room-layout.focus-watch {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.refined-room-layout.focus-stage .primary-column,
-.refined-room-layout.focus-watch .primary-column {
-  gap: 22px;
-}
-
-.refined-room-layout.focus-stage .sidebar-column,
-.refined-room-layout.focus-watch .sidebar-column {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.chat-rail {
+  grid-area: chat;
+  display: grid;
   gap: 18px;
+  align-content: start;
+}
+
+.main-stage-column {
+  grid-area: main;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.utility-column {
+  grid-area: utility;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.stage-shell,
+.watch-shell,
+.chat-slot,
+.console-slot,
+.people-slot,
+.chat-rail,
+.main-stage-column,
+.utility-column {
+  min-width: 0;
+}
+
+.chat-rail .chat-panel {
+  min-height: calc(100vh - 210px);
+}
+
+.chat-rail .message-list {
+  max-height: clamp(260px, 46vh, 680px);
+}
+
+.chat-rail .composer-input {
+  min-height: 148px;
+}
+
+.studio-layout.watch-active .chat-rail {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.main-stage-column .watch-shell,
+.main-stage-column .stage-shell {
+  width: 100%;
+}
+
+.stage-shell.rail-mode .media-stage {
+  gap: 14px;
+}
+
+.stage-shell.rail-mode .media-grid,
+.stage-shell.rail-mode .presence-strip {
+  grid-template-columns: 1fr;
+}
+
+.stage-shell.rail-mode .media-surface,
+.stage-shell.rail-mode .featured-share-surface,
+.stage-shell.rail-mode .featured-share-placeholder {
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+}
+
+.stage-shell.rail-mode .panel-head-actions {
+  flex-wrap: nowrap;
+}
+
+.stage-shell.rail-mode .count-badge,
+.chat-rail .count-badge,
+.utility-column .count-badge {
+  min-width: 42px;
+}
+
+.refined-room-layout.focus-stage {
+  grid-template-columns: clamp(260px, 16vw, 320px) minmax(0, 1.32fr) clamp(260px, 17vw, 320px);
+}
+
+.refined-room-layout.focus-watch {
+  grid-template-columns: clamp(260px, 16vw, 320px) minmax(0, 1.42fr) clamp(260px, 17vw, 320px);
+}
+
+.refined-room-layout.focus-stage .chat-rail,
+.refined-room-layout.focus-stage .utility-column,
+.refined-room-layout.focus-watch .chat-rail,
+.refined-room-layout.focus-watch .utility-column,
+.refined-room-layout.focus-stage .main-stage-column,
+.refined-room-layout.focus-watch .main-stage-column {
+  gap: 16px;
 }
 
 .choice-grid {
@@ -462,6 +562,10 @@
   gap: 18px;
 }
 
+.console-slot .console-stack {
+  gap: 18px;
+}
+
 .panel-head-spacious {
   margin-bottom: 2px;
 }
@@ -500,6 +604,24 @@ button:disabled {
 
 .room-banner {
   gap: 18px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  grid-template-areas:
+    "title invite"
+    "meta invite";
+  align-items: start;
+}
+
+.room-title-row {
+  grid-area: title;
+}
+
+.room-meta-row {
+  grid-area: meta;
+}
+
+.invite-panel {
+  grid-area: invite;
+  align-self: stretch;
 }
 
 .room-banner h1 {
@@ -545,7 +667,9 @@ button:disabled {
 }
 
 .featured-share-surface {
-  min-height: min(58vh, 680px);
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
   border-radius: 24px;
   overflow: hidden;
   background: var(--surface-strong);
@@ -642,7 +766,9 @@ button:disabled {
 }
 
 .media-surface {
-  min-height: 250px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
   border-radius: 22px;
   overflow: hidden;
   background: var(--surface-strong);
@@ -819,7 +945,9 @@ button:disabled {
 }
 
 .watch-party-player-shell {
-  min-height: 320px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
   border-radius: 26px;
   overflow: hidden;
   background: #0f172a;
@@ -841,19 +969,16 @@ button:disabled {
 }
 
 .stage-shell.is-focused .featured-share-surface,
-.stage-shell.is-focused .featured-share-placeholder {
-  min-height: min(82vh, 960px);
-}
-
+.stage-shell.is-focused .featured-share-placeholder,
 .watch-shell.is-focused .watch-party-player-shell,
 .watch-shell.is-focused .watch-party-player,
 .watch-shell.is-focused .watch-party-player iframe {
-  min-height: min(76vh, 900px);
+  width: 100%;
 }
 
 .watch-shell.is-focused .watch-party-card,
 .stage-shell.is-focused .media-stage {
-  padding: 28px;
+  padding: 22px;
 }
 
 .modal-backdrop {
@@ -922,8 +1047,32 @@ button:disabled {
   border: 0;
 }
 
+@media (max-width: 1200px) {
+  .refined-room-layout {
+    grid-template-columns: minmax(0, 1fr) clamp(280px, 30vw, 340px);
+    grid-template-areas:
+      "main utility"
+      "chat utility";
+  }
+
+  .utility-column {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-rail .chat-panel {
+    min-height: auto;
+  }
+}
+
 @media (max-width: 980px) {
-  .page-shell {
+  .studio-layout {
+    grid-template-areas:
+      "chat"
+      "main"
+      "utility";
+  }
+  .page-shell,
+  .room-shell {
     width: min(100% - 24px, 100%);
     padding: 22px 0 32px;
   }
@@ -931,8 +1080,24 @@ button:disabled {
   .hero-grid,
   .landing-grid-compact,
   .refined-room-layout,
-  .choice-grid {
+  .choice-grid,
+  .room-banner {
     grid-template-columns: 1fr;
+  }
+
+  .room-banner {
+    grid-template-areas:
+      "title"
+      "meta"
+      "invite";
+  }
+
+  .utility-column {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-rail .chat-panel {
+    min-height: auto;
   }
 
   .page-topbar,
@@ -956,22 +1121,6 @@ button:disabled {
     justify-content: space-between;
   }
 
-  .refined-room-layout.focus-stage .sidebar-column,
-  .refined-room-layout.focus-watch .sidebar-column {
-    grid-template-columns: 1fr;
-  }
-
-  .stage-shell.is-focused .featured-share-surface,
-  .stage-shell.is-focused .featured-share-placeholder {
-    min-height: 56vh;
-  }
-
-  .watch-shell.is-focused .watch-party-player-shell,
-  .watch-shell.is-focused .watch-party-player,
-  .watch-shell.is-focused .watch-party-player iframe {
-    min-height: 52vh;
-  }
-
   .message-card {
     width: min(92%, 100%);
   }
@@ -983,14 +1132,13 @@ button:disabled {
   }
 
   .featured-share-surface,
-  .featured-share-placeholder {
-    min-height: 44vh;
-  }
-
+  .featured-share-placeholder,
   .watch-party-player-shell,
   .watch-party-player,
-  .watch-party-player iframe {
-    min-height: 220px;
+  .watch-party-player iframe,
+  .media-surface {
+    width: 100%;
+    min-height: 0;
   }
 
   .modal-card,
@@ -999,10 +1147,15 @@ button:disabled {
     padding: 20px;
     border-radius: 24px;
   }
-
-  .media-surface {
-    min-height: 210px;
-  }
 }
+
+
+
+
+
+
+
+
+
 
 
