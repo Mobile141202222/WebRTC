@@ -1,4 +1,8 @@
 ﻿function getPresenceChip(participant, roomMediaMode) {
+  if (participant.screenSharing) {
+    return 'Screen live';
+  }
+
   if (!participant.peerId) {
     return 'Chat only';
   }
@@ -32,9 +36,9 @@ function ParticipantsPanel({ participants, roomMediaMode, selfParticipantId }) {
 
       <div className="participant-list refined-list">
         {participants.map((participant) => (
-          <article className="participant-card refined-card" key={participant.id}>
+          <article className={`participant-card refined-card ${participant.screenSharing ? 'speaking' : ''}`} key={participant.id}>
             <div className="participant-main">
-              <span className="participant-avatar">{getInitials(participant.name)}</span>
+              <span className="participant-avatar premium-avatar">{getInitials(participant.name)}</span>
               <div className="participant-meta">
                 <strong>
                   {participant.name}

@@ -16,15 +16,39 @@ function shouldInitiateCall(selfId, remoteId) {
   return selfId.localeCompare(remoteId) > 0;
 }
 
+function stopStream(stream) {
+  if (!stream) {
+    return;
+  }
+
+  for (const track of stream.getTracks()) {
+    track.stop();
+  }
+}
+
 export class VoiceEngine {
   constructor(callbacks = {}) {
     this.callbacks = callbacks;
     this.calls = new Map();
     this.localParticipantId = '';
     this.localStream = null;
+    this.localMediaMode = 'voice';
     this.mediaUnavailable = false;
     this.peer = null;
     this.peerId = '';
+    this.preferredDevices = {
+      audioInputId: '',
+      videoInputId: '',
+    };
+    this.availableDevices = {
+      audioInputs: [],
+      videoInputs: [],
+    };
+    this.audioSourceStream = null;
+    this.cameraSourceStream = null;
+    this.screenStream = null;
+    this.isScreenSharing = false;
+    this.deviceChangeHandler = null;
   }
 
   async initialize({ participantId }) {
@@ -71,7 +95,162 @@ export class VoiceEngine {
       peer.on('error', handleError);
     });
 
+    if (navigator.mediaDevices?.addEventListener) {
+      this.deviceChangeHandler = () => {
+        void this.refreshDevices();
+      };
+      navigator.mediaDevices.addEventListener('devicechange', this.deviceChangeHandler);
+    }
+
+    await this.refreshDevices();
     return this.peerId;
+  }
+
+  supportsScreenShare() {
+    return Boolean(navigator.mediaDevices?.getDisplayMedia);
+  }
+
+  getPreferredDevices() {
+    return { ...this.preferredDevices };
+  }
+
+  getAvailableDevices() {
+    return this.availableDevices;
+  }
+
+  async refreshDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return this.availableDevices;
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices
+      .filter((device) => device.kind === 'audioinput')
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || `Microphone ${index + 1}`,
+      }));
+    const videoInputs = devices
+      .filter((device) => device.kind === 'videoinput')
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || `Camera ${index + 1}`,
+      }));
+
+    this.availableDevices = {
+      audioInputs,
+      videoInputs,
+    };
+
+    if (
+      this.preferredDevices.audioInputId
+      && !audioInputs.some((device) => device.deviceId === this.preferredDevices.audioInputId)
+    ) {
+      this.preferredDevices.audioInputId = '';
+    }
+
+    if (
+      this.preferredDevices.videoInputId
+      && !videoInputs.some((device) => device.deviceId === this.preferredDevices.videoInputId)
+    ) {
+      this.preferredDevices.videoInputId = '';
+    }
+
+    this.callbacks.onDevicesChanged?.(this.availableDevices);
+    return this.availableDevices;
+  }
+
+  buildAudioConstraint() {
+    if (!this.preferredDevices.audioInputId) {
+      return true;
+    }
+
+    return {
+      deviceId: { exact: this.preferredDevices.audioInputId },
+    };
+  }
+
+  buildVideoConstraint() {
+    if (!this.preferredDevices.videoInputId) {
+      return true;
+    }
+
+    return {
+      deviceId: { exact: this.preferredDevices.videoInputId },
+    };
+  }
+
+  async requestUserMedia(constraints, fallbackConstraints = null) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      if (!fallbackConstraints) {
+        throw error;
+      }
+
+      return navigator.mediaDevices.getUserMedia(fallbackConstraints);
+    }
+  }
+
+  async buildCompositeStream({ mediaMode = this.localMediaMode } = {}) {
+    const audioSourceStream = await this.requestUserMedia(
+      {
+        audio: this.buildAudioConstraint(),
+        video: false,
+      },
+      {
+        audio: true,
+        video: false,
+      },
+    );
+
+    let cameraSourceStream = null;
+    let videoTrack = this.screenStream?.getVideoTracks()?.[0] || null;
+
+    if (!videoTrack && mediaMode === 'video') {
+      cameraSourceStream = await this.requestUserMedia(
+        {
+          audio: false,
+          video: this.buildVideoConstraint(),
+        },
+        {
+          audio: false,
+          video: true,
+        },
+      );
+      videoTrack = cameraSourceStream.getVideoTracks()[0] || null;
+    }
+
+    const stream = new MediaStream();
+
+    for (const track of audioSourceStream.getAudioTracks()) {
+      stream.addTrack(track);
+    }
+
+    if (videoTrack) {
+      stream.addTrack(videoTrack);
+    }
+
+    return {
+      audioSourceStream,
+      cameraSourceStream,
+      stream,
+    };
+  }
+
+  commitLocalMedia({ audioSourceStream, cameraSourceStream, stream }) {
+    if (this.audioSourceStream && this.audioSourceStream !== audioSourceStream) {
+      stopStream(this.audioSourceStream);
+    }
+
+    if (this.cameraSourceStream && this.cameraSourceStream !== cameraSourceStream) {
+      stopStream(this.cameraSourceStream);
+    }
+
+    this.audioSourceStream = audioSourceStream;
+    this.cameraSourceStream = cameraSourceStream;
+    this.localStream = stream;
+    this.callbacks.onLocalStream?.(stream);
   }
 
   async ensureLocalStream({ mediaMode = 'voice' } = {}) {
@@ -83,27 +262,86 @@ export class VoiceEngine {
       throw new Error('Media unavailable');
     }
 
+    this.localMediaMode = mediaMode;
+
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: mediaMode === 'video',
-      });
+      const nextMedia = await this.buildCompositeStream({ mediaMode });
+      this.commitLocalMedia(nextMedia);
+      await this.refreshDevices();
+      return this.localStream;
     } catch (error) {
       if (mediaMode === 'video') {
         this.callbacks.onStatusChange?.('Camera unavailable');
-
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
-      } else {
-        this.mediaUnavailable = true;
-        throw error;
+        const nextMedia = await this.buildCompositeStream({ mediaMode: 'voice' });
+        this.commitLocalMedia(nextMedia);
+        await this.refreshDevices();
+        return this.localStream;
       }
+
+      this.mediaUnavailable = true;
+      throw error;
+    }
+  }
+
+  async applyDevicePreferences(preferences, { mediaMode = this.localMediaMode } = {}) {
+    this.preferredDevices = {
+      ...this.preferredDevices,
+      ...preferences,
+    };
+    this.mediaUnavailable = false;
+    this.localMediaMode = mediaMode;
+
+    const nextMedia = await this.buildCompositeStream({ mediaMode });
+    this.commitLocalMedia(nextMedia);
+    await this.refreshDevices();
+    return this.getLocalState();
+  }
+
+  async startScreenShare() {
+    if (!this.supportsScreenShare()) {
+      throw new Error('Screen share unavailable');
     }
 
-    this.callbacks.onLocalStream?.(this.localStream);
-    return this.localStream;
+    this.localMediaMode = 'video';
+
+    if (!this.localStream) {
+      await this.ensureLocalStream({ mediaMode: 'video' });
+    }
+
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+    const screenTrack = screenStream.getVideoTracks()[0];
+
+    if (!screenTrack) {
+      throw new Error('Screen share unavailable');
+    }
+
+    screenTrack.onended = () => {
+      void this.stopScreenShare();
+      this.callbacks.onStatusChange?.('Screen share ended');
+    };
+
+    this.screenStream = screenStream;
+    this.isScreenSharing = true;
+
+    const nextMedia = await this.buildCompositeStream({ mediaMode: 'video' });
+    this.commitLocalMedia(nextMedia);
+    return this.getLocalState();
+  }
+
+  async stopScreenShare() {
+    if (this.screenStream) {
+      stopStream(this.screenStream);
+      this.screenStream = null;
+    }
+
+    this.isScreenSharing = false;
+
+    const nextMedia = await this.buildCompositeStream({ mediaMode: this.localMediaMode });
+    this.commitLocalMedia(nextMedia);
+    return this.getLocalState();
   }
 
   getLocalState() {
@@ -112,14 +350,31 @@ export class VoiceEngine {
 
     return {
       audioEnabled: audioTracks.some((track) => track.enabled),
+      cameraAvailable: this.availableDevices.videoInputs.length > 0,
       hasVideoTrack: videoTracks.length > 0,
+      screenSharing: this.isScreenSharing,
       videoEnabled: videoTracks.some((track) => track.enabled),
+      ...this.getPreferredDevices(),
     };
+  }
+
+  resetConnections() {
+    for (const [participantId, activeCall] of this.calls.entries()) {
+      activeCall.close();
+      this.callbacks.onRemoteDisconnect?.(participantId);
+    }
+
+    this.calls.clear();
+  }
+
+  async reconnectParticipants(participants, selfParticipantId) {
+    this.resetConnections();
+    await this.syncParticipants(participants, selfParticipantId);
   }
 
   async answerIncomingCall(call) {
     try {
-      const stream = await this.ensureLocalStream({ mediaMode: 'voice' });
+      const stream = await this.ensureLocalStream({ mediaMode: this.localMediaMode });
       const remoteParticipantId = call.metadata?.participantId || call.peer;
 
       call.answer(stream);
@@ -153,11 +408,10 @@ export class VoiceEngine {
       }
 
       try {
-        const stream = await this.ensureLocalStream({
-          mediaMode: participant.videoEnabled ? 'video' : 'voice',
-        });
+        const stream = await this.ensureLocalStream({ mediaMode: this.localMediaMode });
         const outgoingCall = this.peer.call(participant.peerId, stream, {
           metadata: {
+            mediaMode: this.localMediaMode,
             participantId: selfParticipantId,
           },
         });
@@ -195,14 +449,14 @@ export class VoiceEngine {
   }
 
   setCameraEnabled(enabled) {
-    if (!this.localStream) {
-      return false;
+    if (!this.localStream || this.isScreenSharing) {
+      return this.getLocalState();
     }
 
     const videoTracks = this.localStream.getVideoTracks();
 
     if (videoTracks.length === 0) {
-      return false;
+      return this.getLocalState();
     }
 
     for (const track of videoTracks) {
@@ -214,27 +468,29 @@ export class VoiceEngine {
   }
 
   destroy() {
-    for (const activeCall of this.calls.values()) {
-      activeCall.close();
-    }
-
-    this.calls.clear();
-
-    if (this.localStream) {
-      for (const track of this.localStream.getTracks()) {
-        track.stop();
-      }
-    }
+    this.resetConnections();
+    stopStream(this.audioSourceStream);
+    stopStream(this.cameraSourceStream);
+    stopStream(this.screenStream);
 
     if (this.peer && !this.peer.destroyed) {
       this.peer.destroy();
     }
 
+    if (this.deviceChangeHandler && navigator.mediaDevices?.removeEventListener) {
+      navigator.mediaDevices.removeEventListener('devicechange', this.deviceChangeHandler);
+    }
+
     this.callbacks.onLocalStream?.(null);
+    this.audioSourceStream = null;
+    this.cameraSourceStream = null;
+    this.screenStream = null;
     this.localStream = null;
     this.mediaUnavailable = false;
     this.peer = null;
     this.peerId = '';
+    this.isScreenSharing = false;
+    this.deviceChangeHandler = null;
   }
 
   attachCall(participantId, call) {

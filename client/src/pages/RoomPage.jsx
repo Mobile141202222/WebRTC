@@ -2,21 +2,25 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AudioStreamRack from '../components/AudioStreamRack.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
+import MediaSettingsModal from '../components/MediaSettingsModal.jsx';
 import ParticipantsPanel from '../components/ParticipantsPanel.jsx';
 import RoomConsole from '../components/RoomConsole.jsx';
 import RoomHeader from '../components/RoomHeader.jsx';
+import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
 import { useCleanupHook } from '../hooks/CleanupHook.js';
 import { getFirebaseConfigError, isFirebaseReady } from '../lib/firebase.js';
 import { createParticipantId } from '../lib/roomId.js';
 import { sanitizeDisplayName, sanitizeRoomId } from '../lib/sanitize.js';
 import { ChatProvider } from '../providers/ChatProvider.jsx';
 import {
+  clearWatchParty,
   createRoom,
   joinRoom,
   leaveRoom,
   subscribeToParticipants,
   subscribeToRoom,
   updateParticipantState,
+  updateWatchParty,
 } from '../services/RoomManager.js';
 import { VoiceEngine } from '../services/VoiceEngine.js';
 
@@ -45,6 +49,8 @@ function RoomPage({ onToggleTheme, theme }) {
   const [muted, setMuted] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(requestedMediaMode === 'video');
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [screenShareSupported, setScreenShareSupported] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState([]);
   const [localStream, setLocalStream] = useState(null);
@@ -52,6 +58,16 @@ function RoomPage({ onToggleTheme, theme }) {
   const [selfPeerId, setSelfPeerId] = useState('');
   const [roomMediaMode, setRoomMediaMode] = useState(requestedMediaMode);
   const [voiceStatus, setVoiceStatus] = useState('Connecting...');
+  const [availableDevices, setAvailableDevices] = useState({
+    audioInputs: [],
+    videoInputs: [],
+  });
+  const [selectedDevices, setSelectedDevices] = useState({
+    audioInputId: '',
+    videoInputId: '',
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [watchParty, setWatchParty] = useState(null);
 
   const inviteLink = `${window.location.origin}/room/${roomId}`;
   const selfParticipant = {
@@ -60,8 +76,31 @@ function RoomPage({ onToggleTheme, theme }) {
     name: displayName,
     peerId: selfPeerId,
     audioEnabled: Boolean(localStream) && !muted,
+    screenSharing,
     videoEnabled: cameraEnabled,
   };
+
+  function applyLocalState(localState) {
+    setMuted(!localState.audioEnabled);
+    setCameraAvailable(localState.cameraAvailable || localState.hasVideoTrack);
+    setCameraEnabled(localState.videoEnabled);
+    setScreenSharing(Boolean(localState.screenSharing));
+    setSelectedDevices({
+      audioInputId: localState.audioInputId || '',
+      videoInputId: localState.videoInputId || '',
+    });
+  }
+
+  async function reconnectMedia() {
+    if (!selfPeerId) {
+      return;
+    }
+
+    await voiceEngineRef.current?.reconnectParticipants(
+      participants,
+      participantIdRef.current,
+    );
+  }
 
   const onRemoteStream = useEffectEvent(({ participantId, stream }) => {
     setRemoteStreams((currentStreams) => [
@@ -85,6 +124,10 @@ function RoomPage({ onToggleTheme, theme }) {
     setVoiceStatus(nextMessage);
   });
 
+  const onDevicesChanged = useEffectEvent((nextDevices) => {
+    setAvailableDevices(nextDevices);
+  });
+
   useEffect(() => {
     if (!roomId) {
       setError('Room code ไม่ถูกต้อง');
@@ -99,6 +142,7 @@ function RoomPage({ onToggleTheme, theme }) {
 
     let active = true;
     const voiceEngine = new VoiceEngine({
+      onDevicesChanged,
       onError: onVoiceError,
       onLocalStream,
       onRemoteDisconnect,
@@ -120,6 +164,11 @@ function RoomPage({ onToggleTheme, theme }) {
     setMuted(false);
     setCameraAvailable(false);
     setCameraEnabled(requestedMediaMode === 'video');
+    setScreenSharing(false);
+    setScreenShareSupported(false);
+    setAvailableDevices({ audioInputs: [], videoInputs: [] });
+    setSelectedDevices({ audioInputId: '', videoInputId: '' });
+    setWatchParty(null);
 
     async function bootRoom() {
       let peerId = '';
@@ -129,6 +178,9 @@ function RoomPage({ onToggleTheme, theme }) {
 
         if (active) {
           setSelfPeerId(peerId);
+          setScreenShareSupported(voiceEngine.supportsScreenShare());
+          setAvailableDevices(voiceEngine.getAvailableDevices());
+          setSelectedDevices(voiceEngine.getPreferredDevices());
         }
       } catch {
         if (active) {
@@ -161,6 +213,7 @@ function RoomPage({ onToggleTheme, theme }) {
 
         const nextRoomMediaMode = room?.metadata?.mediaMode || requestedMediaMode;
         setRoomMediaMode(nextRoomMediaMode);
+        setWatchParty(room?.metadata?.watchParty || null);
 
         if (!peerId) {
           return;
@@ -168,15 +221,15 @@ function RoomPage({ onToggleTheme, theme }) {
 
         try {
           await voiceEngine.ensureLocalStream({ mediaMode: nextRoomMediaMode });
+          await voiceEngine.refreshDevices();
           const localState = voiceEngine.getLocalState();
 
           if (!active) {
             return;
           }
 
-          setMuted(!localState.audioEnabled);
-          setCameraAvailable(localState.hasVideoTrack);
-          setCameraEnabled(localState.videoEnabled);
+          setAvailableDevices(voiceEngine.getAvailableDevices());
+          applyLocalState(localState);
 
           await updateParticipantState({
             roomId,
@@ -184,6 +237,7 @@ function RoomPage({ onToggleTheme, theme }) {
             patch: {
               audioEnabled: localState.audioEnabled,
               peerId,
+              screenSharing: localState.screenSharing,
               videoEnabled: localState.videoEnabled,
             },
           });
@@ -209,6 +263,7 @@ function RoomPage({ onToggleTheme, theme }) {
             patch: {
               audioEnabled: false,
               peerId,
+              screenSharing: false,
               videoEnabled: false,
             },
           });
@@ -247,6 +302,7 @@ function RoomPage({ onToggleTheme, theme }) {
       }
 
       setRoomMediaMode(room.metadata?.mediaMode || 'voice');
+      setWatchParty(room.metadata?.watchParty || null);
     });
 
     const unsubscribeFromParticipants = subscribeToParticipants(roomId, (nextParticipants) => {
@@ -325,28 +381,103 @@ function RoomPage({ onToggleTheme, theme }) {
     setDisplayName(cleanName);
   }
 
-  function handleToggleMute() {
+  async function handleToggleMute() {
     const localState = voiceEngineRef.current?.setMuted(!muted) || {
       audioEnabled: !muted,
     };
 
-    setMuted(!localState.audioEnabled);
-    void syncSelfParticipant({
+    applyLocalState(localState);
+    await syncSelfParticipant({
       audioEnabled: localState.audioEnabled,
     });
   }
 
-  function handleToggleCamera() {
+  async function handleToggleCamera() {
     const localState = voiceEngineRef.current?.setCameraEnabled(!cameraEnabled);
 
     if (!localState || localState === false) {
       return;
     }
 
-    setCameraEnabled(localState.videoEnabled);
-    void syncSelfParticipant({
+    applyLocalState(localState);
+    await syncSelfParticipant({
+      screenSharing: localState.screenSharing,
       videoEnabled: localState.videoEnabled,
     });
+  }
+
+  async function handleRefreshDevices() {
+    const nextDevices = await voiceEngineRef.current?.refreshDevices();
+
+    if (nextDevices) {
+      setAvailableDevices(nextDevices);
+    }
+  }
+
+  async function handleApplyDevices(nextSelection) {
+    try {
+      const localState = await voiceEngineRef.current?.applyDevicePreferences(nextSelection, {
+        mediaMode: roomMediaMode,
+      });
+
+      if (!localState) {
+        return;
+      }
+
+      applyLocalState(localState);
+      setAvailableDevices(voiceEngineRef.current?.getAvailableDevices() || availableDevices);
+      await syncSelfParticipant({
+        audioEnabled: localState.audioEnabled,
+        screenSharing: localState.screenSharing,
+        videoEnabled: localState.videoEnabled,
+      });
+      await reconnectMedia();
+      setSettingsOpen(false);
+      setInfoMessage('Media device updated');
+    } catch (deviceError) {
+      setInfoMessage(deviceError?.message || 'Unable to update devices');
+    }
+  }
+
+  async function handleToggleScreenShare() {
+    try {
+      const localState = screenSharing
+        ? await voiceEngineRef.current?.stopScreenShare()
+        : await voiceEngineRef.current?.startScreenShare();
+
+      if (!localState) {
+        return;
+      }
+
+      applyLocalState(localState);
+      await syncSelfParticipant({
+        audioEnabled: localState.audioEnabled,
+        screenSharing: localState.screenSharing,
+        videoEnabled: localState.videoEnabled,
+      });
+      await reconnectMedia();
+    } catch (shareError) {
+      setInfoMessage(shareError?.message || 'Unable to share screen');
+    }
+  }
+
+  async function handleSyncWatchParty(nextState) {
+    if (!roomId) {
+      return;
+    }
+
+    await updateWatchParty({
+      roomId,
+      nextState,
+    });
+  }
+
+  async function handleClearWatchParty() {
+    if (!roomId) {
+      return;
+    }
+
+    await clearWatchParty(roomId);
   }
 
   if (!isFirebaseReady()) {
@@ -403,57 +534,93 @@ function RoomPage({ onToggleTheme, theme }) {
   }
 
   return (
-    <main className="room-page page-shell room-shell">
-      <RoomHeader
-        copyState={copyState}
-        inviteLink={inviteLink}
-        onCopyInvite={handleCopyInvite}
-        onToggleTheme={onToggleTheme}
-        participantCount={participants.length || 1}
-        roomId={roomId}
-        roomMediaMode={roomMediaMode}
-        theme={theme}
-      />
+    <>
+      <main className="room-page page-shell room-shell">
+        <RoomHeader
+          copyState={copyState}
+          inviteLink={inviteLink}
+          onCopyInvite={handleCopyInvite}
+          onToggleTheme={onToggleTheme}
+          participantCount={participants.length || 1}
+          roomId={roomId}
+          roomMediaMode={roomMediaMode}
+          theme={theme}
+        />
 
-      {error ? <p className="feedback error">{error}</p> : null}
-      {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
-      {isBooting ? <p className="feedback">Connecting...</p> : null}
+        {error ? <p className="feedback error">{error}</p> : null}
+        {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
+        {isBooting ? <p className="feedback">Connecting...</p> : null}
 
-      <div className="room-layout refined-room-layout">
-        <div className="primary-column">
-          <AudioStreamRack
-            localStream={localStream}
-            mediaMode={roomMediaMode}
-            participants={participants}
-            remoteStreams={remoteStreams}
-          />
-          <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
-            <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
-          </ChatProvider>
+        <div className="room-layout refined-room-layout">
+          <div className="primary-column">
+            <AudioStreamRack
+              localScreenSharing={screenSharing}
+              localStream={localStream}
+              mediaMode={roomMediaMode}
+              participants={participants}
+              remoteStreams={remoteStreams}
+            />
+            <WatchPartyPanel
+              onClear={handleClearWatchParty}
+              onSyncState={handleSyncWatchParty}
+              participantId={participantIdRef.current}
+              watchParty={watchParty}
+            />
+            <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
+              <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
+            </ChatProvider>
+          </div>
+
+          <aside className="sidebar-column">
+            <RoomConsole
+              cameraAvailable={cameraAvailable}
+              cameraEnabled={cameraEnabled}
+              mediaConnected={Boolean(selfPeerId && localStream)}
+              muted={muted}
+              onLeave={handleLeave}
+              onOpenSettings={() => {
+                void handleRefreshDevices();
+                setSettingsOpen(true);
+              }}
+              onToggleCamera={() => {
+                void handleToggleCamera();
+              }}
+              onToggleMute={() => {
+                void handleToggleMute();
+              }}
+              onToggleScreenShare={() => {
+                void handleToggleScreenShare();
+              }}
+              roomMediaMode={roomMediaMode}
+              screenShareSupported={screenShareSupported}
+              screenSharing={screenSharing}
+              voiceStatus={voiceStatus}
+            />
+            <ParticipantsPanel
+              participants={participants.length ? participants : [selfParticipant]}
+              roomMediaMode={roomMediaMode}
+              selfParticipantId={participantIdRef.current}
+            />
+          </aside>
         </div>
+      </main>
 
-        <aside className="sidebar-column">
-          <RoomConsole
-            cameraAvailable={cameraAvailable}
-            cameraEnabled={cameraEnabled}
-            mediaConnected={Boolean(selfPeerId && localStream)}
-            muted={muted}
-            onLeave={handleLeave}
-            onToggleCamera={handleToggleCamera}
-            onToggleMute={handleToggleMute}
-            roomMediaMode={roomMediaMode}
-            voiceStatus={voiceStatus}
-          />
-          <ParticipantsPanel
-            participants={participants.length ? participants : [selfParticipant]}
-            roomMediaMode={roomMediaMode}
-            selfParticipantId={participantIdRef.current}
-          />
-        </aside>
-      </div>
-    </main>
+      <MediaSettingsModal
+        devices={availableDevices}
+        onApply={(nextSelection) => {
+          void handleApplyDevices(nextSelection);
+        }}
+        onClose={() => setSettingsOpen(false)}
+        onRefresh={() => {
+          void handleRefreshDevices();
+        }}
+        open={settingsOpen}
+        roomMediaMode={roomMediaMode}
+        screenShareSupported={screenShareSupported}
+        selectedDevices={selectedDevices}
+      />
+    </>
   );
 }
 
 export default RoomPage;
-

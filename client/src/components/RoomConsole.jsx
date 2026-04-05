@@ -1,4 +1,13 @@
-﻿import { ExitIcon, MicIcon, MicOffIcon, VideoIcon, VideoOffIcon } from './Icons.jsx';
+﻿import {
+  ExitIcon,
+  MicIcon,
+  MicOffIcon,
+  ScreenShareIcon,
+  ScreenStopIcon,
+  SettingsIcon,
+  VideoIcon,
+  VideoOffIcon,
+} from './Icons.jsx';
 
 function RoomConsole({
   cameraAvailable,
@@ -6,9 +15,13 @@ function RoomConsole({
   mediaConnected,
   muted,
   onLeave,
+  onOpenSettings,
   onToggleCamera,
   onToggleMute,
+  onToggleScreenShare,
   roomMediaMode,
+  screenShareSupported,
+  screenSharing,
   voiceStatus,
 }) {
   return (
@@ -27,7 +40,7 @@ function RoomConsole({
           <span className="status-pill">{roomMediaMode === 'video' ? 'Video room' : 'Voice room'}</span>
         </div>
 
-        <div className="icon-toolbar">
+        <div className="icon-toolbar icon-toolbar-room">
           <button
             aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
             className="secondary-button icon-button control-icon"
@@ -43,7 +56,7 @@ function RoomConsole({
             <button
               aria-label={cameraEnabled ? 'Hide video' : 'Show video'}
               className="secondary-button icon-button control-icon"
-              disabled={!mediaConnected || !cameraAvailable}
+              disabled={!mediaConnected || !cameraAvailable || screenSharing}
               onClick={onToggleCamera}
               title={cameraEnabled ? 'Hide video' : 'Show video'}
               type="button"
@@ -51,6 +64,27 @@ function RoomConsole({
               {cameraEnabled ? <VideoOffIcon /> : <VideoIcon />}
             </button>
           ) : null}
+
+          <button
+            aria-label={screenSharing ? 'Stop screen share' : 'Start screen share'}
+            className="secondary-button icon-button control-icon"
+            disabled={!mediaConnected || !screenShareSupported}
+            onClick={onToggleScreenShare}
+            title={screenSharing ? 'Stop share' : 'Share screen'}
+            type="button"
+          >
+            {screenSharing ? <ScreenStopIcon /> : <ScreenShareIcon />}
+          </button>
+
+          <button
+            aria-label="Open media settings"
+            className="secondary-button icon-button control-icon"
+            onClick={onOpenSettings}
+            title="Settings"
+            type="button"
+          >
+            <SettingsIcon />
+          </button>
         </div>
 
         {!cameraAvailable && roomMediaMode === 'video' ? (
@@ -59,13 +93,19 @@ function RoomConsole({
       </section>
 
       <section className="card exit-card elevated-card">
-        <div className="panel-head">
+        <div className="panel-head panel-head-spacious">
           <div className="heading-group">
             <span className="eyebrow">Exit</span>
             <h2>Leave room</h2>
           </div>
         </div>
-        <button aria-label="Leave room" className="danger-button icon-button exit-button" onClick={onLeave} title="Leave room" type="button">
+        <button
+          aria-label="Leave room"
+          className="danger-button icon-button exit-button"
+          onClick={onLeave}
+          title="Leave room"
+          type="button"
+        >
           <ExitIcon />
           <span>Leave</span>
         </button>

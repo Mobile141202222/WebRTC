@@ -37,6 +37,7 @@ function buildParticipant({
   isHost,
   audioEnabled = true,
   videoEnabled = false,
+  screenSharing = false,
 }) {
   const now = Date.now();
 
@@ -49,6 +50,7 @@ function buildParticipant({
     isHost,
     audioEnabled,
     videoEnabled,
+    screenSharing,
   };
 }
 
@@ -61,13 +63,22 @@ function buildRoomMetadata({
   const now = Date.now();
 
   return {
+    ...(previousMetadata || {}),
     createdAt: previousMetadata?.createdAt || now,
     expiresAt: now + ROOM_TTL_MS,
     hostParticipantId,
     hostPeerId,
     mediaMode,
     updatedAt: now,
+    watchParty: previousMetadata?.watchParty || null,
   };
+}
+
+function extendRoomLifetime(database, roomId, now = Date.now()) {
+  return update(ref(database, `rooms/${roomId}/metadata`), {
+    expiresAt: now + ROOM_TTL_MS,
+    updatedAt: now,
+  });
 }
 
 export async function createRoom({
@@ -174,7 +185,30 @@ export async function updateParticipantState({ roomId, participantId, patch }) {
     lastSeenAt: now,
   });
 
+  await extendRoomLifetime(database, roomId, now);
+}
+
+export async function updateWatchParty({ roomId, nextState }) {
+  const database = assertFirebaseConfigured();
+  const now = Date.now();
+
   await update(ref(database, `rooms/${roomId}/metadata`), {
+    watchParty: {
+      ...nextState,
+      syncedAt: now,
+      updatedAt: now,
+    },
+    expiresAt: now + ROOM_TTL_MS,
+    updatedAt: now,
+  });
+}
+
+export async function clearWatchParty(roomId) {
+  const database = assertFirebaseConfigured();
+  const now = Date.now();
+
+  await update(ref(database, `rooms/${roomId}/metadata`), {
+    watchParty: null,
     expiresAt: now + ROOM_TTL_MS,
     updatedAt: now,
   });
@@ -248,10 +282,7 @@ export async function appendMessage({ roomId, participant, text }) {
     user: sanitizeDisplayName(participant.name),
   });
 
-  await update(ref(database, `rooms/${roomId}/metadata`), {
-    expiresAt: now + ROOM_TTL_MS,
-    updatedAt: now,
-  });
+  await extendRoomLifetime(database, roomId, now);
 
   return nextMessageRef.key;
 }
@@ -275,4 +306,3 @@ export async function deleteRoomIfEmpty(roomId) {
 
   return false;
 }
-
