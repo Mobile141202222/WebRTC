@@ -6,6 +6,38 @@ function getInitials(label = '') {
   return `${first[0] || ''}${second[0] || ''}`.toUpperCase() || '?';
 }
 
+function getScreenTrack(videoTracks, prefersScreen = false) {
+  if (!videoTracks.length) {
+    return null;
+  }
+
+  const explicitScreenTrack = videoTracks.find((track) => Boolean(track.getSettings?.().displaySurface));
+
+  if (explicitScreenTrack) {
+    return explicitScreenTrack;
+  }
+
+  if (prefersScreen && videoTracks.length > 1) {
+    return videoTracks[videoTracks.length - 1];
+  }
+
+  return null;
+}
+
+function buildDisplayStream({ audioTracks = [], videoTrack = null }) {
+  const stream = new MediaStream();
+
+  if (videoTrack) {
+    stream.addTrack(videoTrack);
+  }
+
+  for (const track of audioTracks) {
+    stream.addTrack(track);
+  }
+
+  return stream;
+}
+
 function useAudioLevel(stream) {
   const [level, setLevel] = useState(0);
   const lastLevelRef = useRef(0);
@@ -18,6 +50,7 @@ function useAudioLevel(stream) {
         lastLevelRef.current = 0;
         setLevel(0);
       });
+
       return () => window.cancelAnimationFrame(resetFrame);
     }
 
@@ -28,6 +61,7 @@ function useAudioLevel(stream) {
         lastLevelRef.current = 0;
         setLevel(0);
       });
+
       return () => window.cancelAnimationFrame(resetFrame);
     }
 
@@ -121,7 +155,7 @@ function PanelControls({ isExpanded, onToggleExpand, onToggleFullscreen }) {
   );
 }
 
-function FeaturedTile({ entry }) {
+function MediaTile({ compact = false, entry, featured = false }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const hasVideoTrack = (entry.stream?.getVideoTracks() || []).length > 0;
@@ -159,19 +193,27 @@ function FeaturedTile({ entry }) {
     };
   }, [entry.stream, hasVideoTrack]);
 
+  const cardClass = featured
+    ? `featured-share-tile ${isSpeaking ? 'speaking' : ''}`
+    : `media-tile ${compact ? 'compact' : ''} ${hasVideoTrack ? 'video' : 'audio'} ${isSpeaking ? 'speaking' : ''}`;
+  const surfaceClass = featured ? 'featured-share-surface' : 'media-surface';
+  const placeholderClass = featured
+    ? 'media-placeholder featured-share-placeholder'
+    : 'media-placeholder';
+
   return (
-    <article className={`featured-share-tile ${isSpeaking ? 'speaking' : ''}`}>
-      <div className="featured-share-surface">
+    <article className={cardClass}>
+      <div className={surfaceClass}>
         {hasVideoTrack ? (
           <video autoPlay muted={entry.muted} playsInline ref={videoRef} />
         ) : (
-          <div className="media-placeholder featured-share-placeholder">
+          <div className={placeholderClass}>
             <span className="media-avatar premium-avatar">{getInitials(entry.label)}</span>
           </div>
         )}
         {!hasVideoTrack && entry.stream ? <audio autoPlay muted={entry.muted} playsInline ref={audioRef} /> : null}
       </div>
-      <div className="featured-share-footer">
+      <div className={featured ? 'featured-share-footer' : 'media-caption media-caption-extended'}>
         <div>
           <strong>{entry.label}</strong>
           <span>{entry.screenSharing ? 'Screen share' : entry.role}</span>
@@ -185,131 +227,100 @@ function FeaturedTile({ entry }) {
   );
 }
 
-function CompactPresenceCard({ entry }) {
-  const level = useAudioLevel(entry.stream);
-  const isSpeaking = level > 0.12;
+function createSplitEntries({ id, label, muted, role, screenSharing, stream, previewStream = null }) {
+  const audioTracks = stream?.getAudioTracks() || [];
+  const videoTracks = stream?.getVideoTracks() || [];
+  const screenTrack = getScreenTrack(videoTracks, screenSharing);
+  const cameraTrack = previewStream?.getVideoTracks?.()[0] || videoTracks.find((track) => track !== screenTrack) || null;
 
-  return (
-    <article className={`presence-card ${isSpeaking ? 'speaking' : ''}`}>
-      <span className={`presence-avatar premium-avatar ${isSpeaking ? 'active' : ''}`}>
-        {getInitials(entry.label)}
-      </span>
-      <div className="presence-copy">
-        <strong>{entry.label}</strong>
-        <span>{entry.screenSharing ? 'Sharing' : entry.role}</span>
-      </div>
-      <span className={`presence-dot ${isSpeaking ? 'active' : ''}`} />
-    </article>
-  );
-}
+  if (screenSharing && screenTrack) {
+    const entries = [
+      {
+        id: `${id}-screen`,
+        label,
+        muted,
+        role: 'Screen share',
+        screenSharing: true,
+        stream: buildDisplayStream({ audioTracks, videoTrack: screenTrack }),
+      },
+    ];
 
-function StandardTile({ entry }) {
-  const videoRef = useRef(null);
-  const audioRef = useRef(null);
-  const hasVideoTrack = (entry.stream?.getVideoTracks() || []).length > 0;
-  const level = useAudioLevel(entry.stream);
-  const isSpeaking = level > 0.12;
-
-  useEffect(() => {
-    const videoElement = videoRef.current;
-    const audioElement = audioRef.current;
-
-    if (videoElement) {
-      videoElement.srcObject = hasVideoTrack && entry.stream ? entry.stream : null;
-
-      if (hasVideoTrack && entry.stream) {
-        void videoElement.play?.().catch(() => {});
-      }
+    if (cameraTrack) {
+      entries.push({
+        id: `${id}-camera`,
+        label,
+        muted,
+        role: 'Webcam',
+        screenSharing: false,
+        stream: buildDisplayStream({ videoTrack: cameraTrack }),
+      });
     }
 
-    if (audioElement) {
-      audioElement.srcObject = !hasVideoTrack && entry.stream ? entry.stream : null;
+    return entries;
+  }
 
-      if (!hasVideoTrack && entry.stream) {
-        void audioElement.play?.().catch(() => {});
-      }
-    }
-
-    return () => {
-      if (videoElement) {
-        videoElement.srcObject = null;
-      }
-
-      if (audioElement) {
-        audioElement.srcObject = null;
-      }
-    };
-  }, [entry.stream, hasVideoTrack]);
-
-  return (
-    <article className={`media-tile ${hasVideoTrack ? 'video' : 'audio'} ${isSpeaking ? 'speaking' : ''}`}>
-      <div className="media-surface">
-        {hasVideoTrack ? (
-          <video autoPlay muted={entry.muted} playsInline ref={videoRef} />
-        ) : (
-          <div className="media-placeholder">
-            <span className="media-avatar premium-avatar">{getInitials(entry.label)}</span>
-          </div>
-        )}
-        {!hasVideoTrack && entry.stream ? <audio autoPlay muted={entry.muted} playsInline ref={audioRef} /> : null}
-      </div>
-      <div className="media-caption media-caption-extended">
-        <div>
-          <strong>{entry.label}</strong>
-          <span>{entry.role}</span>
-        </div>
-        <div className="media-side-meta">
-          <AudioLevelMeter level={level} />
-          <span className="media-badge">{entry.screenSharing ? 'Screen' : hasVideoTrack ? 'Video' : 'Audio'}</span>
-        </div>
-      </div>
-    </article>
-  );
+  return [
+    {
+      id,
+      label,
+      muted,
+      role,
+      screenSharing: false,
+      stream,
+    },
+  ];
 }
 
 function buildEntries({ localPreviewStream, localScreenSharing, localStream, participants, remoteStreams }) {
   const entries = [];
 
   if (localStream) {
-    entries.push({
-      id: localScreenSharing ? 'local-screen' : 'local',
-      label: 'You',
-      muted: true,
-      role: localScreenSharing ? 'Screen share' : 'Local',
-      screenSharing: localScreenSharing,
-      stream: localStream,
-    });
-  }
-
-  if (localScreenSharing && localPreviewStream) {
-    entries.push({
-      id: 'local-camera-preview',
-      label: 'You',
-      muted: true,
-      role: 'Webcam',
-      screenSharing: false,
-      stream: localPreviewStream,
-    });
+    entries.push(
+      ...createSplitEntries({
+        id: 'local',
+        label: 'You',
+        muted: true,
+        previewStream: localPreviewStream,
+        role: localScreenSharing ? 'Screen share' : 'Local',
+        screenSharing: localScreenSharing,
+        stream: localStream,
+      }),
+    );
   }
 
   for (const remoteStream of remoteStreams) {
     const participant = participants.find((entry) => entry.id === remoteStream.participantId);
 
-    entries.push({
-      id: remoteStream.participantId,
-      label: participant?.name || 'Guest',
-      muted: false,
-      role: participant?.screenSharing ? 'Screen share' : 'Remote',
-      screenSharing: Boolean(participant?.screenSharing),
-      stream: remoteStream.stream,
-    });
+    entries.push(
+      ...createSplitEntries({
+        id: remoteStream.participantId,
+        label: participant?.name || 'Guest',
+        muted: false,
+        role: participant?.screenSharing ? 'Screen share' : 'Remote',
+        screenSharing: Boolean(participant?.screenSharing),
+        stream: remoteStream.stream,
+      }),
+    );
   }
 
   return entries;
 }
 
+function EmptyStage({ mediaMode, title }) {
+  return (
+    <div className="stage-empty">
+      <p className="muted">
+        {mediaMode === 'video'
+          ? title || 'Turn on mic or camera when ready'
+          : 'Turn on mic to start talking'}
+      </p>
+    </div>
+  );
+}
+
 function AudioStreamRack({
   isExpanded = false,
+  layoutMode = 'default',
   localPreviewStream = null,
   localScreenSharing = false,
   localStream,
@@ -328,6 +339,65 @@ function AudioStreamRack({
   });
   const liveCount = entries.length;
   const featuredEntry = entries.find((entry) => entry.screenSharing) || null;
+  const railEntries = entries.filter((entry) => !entry.screenSharing);
+
+  if (layoutMode === 'rail') {
+    return (
+      <section className="card media-stage rail-only-stage elevated-card">
+        <div className="panel-head">
+          <div className="heading-group">
+            <span className="eyebrow">Live</span>
+            <h2>Webcam</h2>
+          </div>
+          <div className="panel-head-actions">
+            <span className="count-badge">{railEntries.length}</span>
+            <PanelControls
+              isExpanded={isExpanded}
+              onToggleExpand={onToggleExpand}
+              onToggleFullscreen={onToggleFullscreen}
+            />
+          </div>
+        </div>
+
+        {railEntries.length ? (
+          <div className="media-rail-list">
+            {railEntries.map((entry) => (
+              <MediaTile compact entry={entry} key={entry.id} />
+            ))}
+          </div>
+        ) : (
+          <EmptyStage mediaMode={mediaMode} title="Webcam shows here when available" />
+        )}
+      </section>
+    );
+  }
+
+  if (layoutMode === 'screen') {
+    return (
+      <section className="card media-stage elevated-card share-priority-stage">
+        <div className="panel-head">
+          <div className="heading-group">
+            <span className="eyebrow">Stage</span>
+            <h2>Shared screen</h2>
+          </div>
+          <div className="panel-head-actions">
+            <span className="count-badge">{featuredEntry ? 1 : 0}</span>
+            <PanelControls
+              isExpanded={isExpanded}
+              onToggleExpand={onToggleExpand}
+              onToggleFullscreen={onToggleFullscreen}
+            />
+          </div>
+        </div>
+
+        {featuredEntry ? (
+          <MediaTile entry={featuredEntry} featured key={featuredEntry.id} />
+        ) : (
+          <EmptyStage mediaMode={mediaMode} title="Shared screen appears here" />
+        )}
+      </section>
+    );
+  }
 
   if (entries.length === 0) {
     return (
@@ -346,42 +416,7 @@ function AudioStreamRack({
             />
           </div>
         </div>
-        <div className="stage-empty">
-          <p className="muted">{mediaMode === 'video' ? 'Turn on mic or camera when ready' : 'Turn on mic to start talking'}</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (featuredEntry) {
-    const audienceEntries = entries.filter((entry) => entry.id !== featuredEntry.id);
-
-    return (
-      <section className="card media-stage elevated-card share-priority-stage">
-        <div className="panel-head">
-          <div className="heading-group">
-            <span className="eyebrow">Stage</span>
-            <h2>Shared screen</h2>
-          </div>
-          <div className="panel-head-actions">
-            <span className="count-badge">{liveCount}</span>
-            <PanelControls
-              isExpanded={isExpanded}
-              onToggleExpand={onToggleExpand}
-              onToggleFullscreen={onToggleFullscreen}
-            />
-          </div>
-        </div>
-
-        <FeaturedTile entry={featuredEntry} />
-
-        {audienceEntries.length ? (
-          <div className="presence-strip">
-            {audienceEntries.map((entry) => (
-              <CompactPresenceCard entry={entry} key={entry.id} />
-            ))}
-          </div>
-        ) : null}
+        <EmptyStage mediaMode={mediaMode} />
       </section>
     );
   }
@@ -405,7 +440,7 @@ function AudioStreamRack({
 
       <div className="media-grid">
         {entries.map((entry) => (
-          <StandardTile entry={entry} key={entry.id} />
+          <MediaTile entry={entry} key={entry.id} />
         ))}
       </div>
     </section>

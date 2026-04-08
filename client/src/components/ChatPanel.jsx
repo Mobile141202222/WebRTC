@@ -13,7 +13,7 @@ function formatMessageTime(value) {
   }).format(new Date(value));
 }
 
-function ChatPanel({ disabled, selfParticipantId }) {
+function ChatPanel({ compact = false, disabled, selfParticipantId }) {
   const { messages, sendMessage } = useChat();
   const endOfMessagesRef = useRef(null);
 
@@ -25,7 +25,7 @@ function ChatPanel({ disabled, selfParticipantId }) {
   }, [messages]);
 
   return (
-    <section className="card chat-panel elevated-card">
+    <section className={`card chat-panel elevated-card ${compact ? 'compact-chat' : ''}`}>
       <div className="panel-head">
         <div className="heading-group">
           <span className="eyebrow">Chat</span>
@@ -36,8 +36,8 @@ function ChatPanel({ disabled, selfParticipantId }) {
 
       <div className="message-list refined-list">
         {messages.length === 0 ? (
-          <div className="message-empty refined-card">
-            <p>No messages yet</p>
+          <div className="message-empty compact-empty-state">
+            <p>Start the room chat</p>
           </div>
         ) : (
           messages.map((message) => {
@@ -63,3 +63,4 @@ function ChatPanel({ disabled, selfParticipantId }) {
 }
 
 export default ChatPanel;
+

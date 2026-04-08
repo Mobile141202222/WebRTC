@@ -13,9 +13,14 @@ import { assertFirebaseConfigured } from '../lib/firebase.js';
 import { sanitizeDisplayName, sanitizeMessage } from '../lib/sanitize.js';
 
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+const EMPTY_ROOM_GRACE_MS = 5 * 60 * 1000;
 
 function roomRef(database, roomId) {
   return ref(database, `rooms/${roomId}`);
+}
+
+function roomsRef(database) {
+  return ref(database, 'rooms');
 }
 
 function participantsRef(database, roomId) {
@@ -81,6 +86,36 @@ function extendRoomLifetime(database, roomId, now = Date.now()) {
   });
 }
 
+async function purgeStaleRooms(database) {
+  const snapshot = await get(roomsRef(database));
+
+  if (!snapshot.exists()) {
+    return;
+  }
+
+  const now = Date.now();
+  const rooms = snapshot.val() || {};
+  const removals = [];
+
+  for (const [nextRoomId, room] of Object.entries(rooms)) {
+    const participants = room?.participants || {};
+    const metadata = room?.metadata || {};
+    const participantCount = Object.keys(participants).length;
+    const updatedAt = Number(metadata.updatedAt || metadata.createdAt || 0);
+    const expiresAt = Number(metadata.expiresAt || 0);
+    const expired = Boolean(expiresAt) && expiresAt < now;
+    const abandoned = participantCount === 0 && updatedAt > 0 && now - updatedAt > EMPTY_ROOM_GRACE_MS;
+
+    if (expired || abandoned) {
+      removals.push(remove(roomRef(database, nextRoomId)));
+    }
+  }
+
+  if (removals.length) {
+    await Promise.allSettled(removals);
+  }
+}
+
 export async function createRoom({
   roomId,
   participantId,
@@ -89,6 +124,7 @@ export async function createRoom({
   mediaMode = 'voice',
 }) {
   const database = assertFirebaseConfigured();
+  await purgeStaleRooms(database);
   const existingRoomSnapshot = await get(roomRef(database, roomId));
   const participant = buildParticipant({
     participantId,
@@ -139,6 +175,7 @@ export async function createRoom({
 
 export async function joinRoom({ roomId, participantId, displayName, peerId }) {
   const database = assertFirebaseConfigured();
+  await purgeStaleRooms(database);
   const roomSnapshot = await get(roomRef(database, roomId));
 
   if (!roomSnapshot.exists()) {
@@ -216,9 +253,7 @@ export async function clearWatchParty(roomId) {
 
 export async function registerDisconnectCleanup({ roomId, participantId }) {
   const database = assertFirebaseConfigured();
-  const participantDisconnect = onDisconnect(
-    participantRef(database, roomId, participantId),
-  );
+  const participantDisconnect = onDisconnect(participantRef(database, roomId, participantId));
   const metadataDisconnect = onDisconnect(ref(database, `rooms/${roomId}/metadata`));
 
   await Promise.all([
@@ -306,3 +341,4 @@ export async function deleteRoomIfEmpty(roomId) {
 
   return false;
 }
+

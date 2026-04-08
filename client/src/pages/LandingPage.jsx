@@ -11,13 +11,9 @@ const ROOM_MODE_STORAGE_KEY = 'ephemeral-chat-room-mode';
 
 function LandingPage({ onToggleTheme, theme }) {
   const navigate = useNavigate();
-  const [displayName, setDisplayName] = useState(
-    () => localStorage.getItem(STORAGE_KEY) || '',
-  );
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
   const [joinCode, setJoinCode] = useState('');
-  const [createMode, setCreateMode] = useState(
-    () => localStorage.getItem(ROOM_MODE_STORAGE_KEY) || 'voice',
-  );
+  const [createMode, setCreateMode] = useState(() => localStorage.getItem(ROOM_MODE_STORAGE_KEY) || 'voice');
   const [error, setError] = useState('');
 
   function rememberDisplayName(nextValue) {
@@ -78,11 +74,6 @@ function LandingPage({ onToggleTheme, theme }) {
           <span className="eyebrow">Private room experience</span>
           <h2>Private Meeting</h2>
           <p className="hero-copy">แชร์ลิงก์เดียวแล้วเริ่มคุยได้ทันที ทั้ง voice, video และ chat ใน layout ที่อ่านง่าย</p>
-          <div className="hero-tags">
-            <span className="info-chip">Ready to share</span>
-            <span className="info-chip">Realtime sync</span>
-            <span className="info-chip">Focused UI</span>
-          </div>
         </div>
 
         <div className="hero-surface">
@@ -188,3 +179,4 @@ function LandingPage({ onToggleTheme, theme }) {
 }
 
 export default LandingPage;
+

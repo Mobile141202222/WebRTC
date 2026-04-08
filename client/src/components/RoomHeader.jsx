@@ -1,9 +1,5 @@
-﻿import { CheckIcon, CopyIcon, SendIcon } from './Icons.jsx';
+import { CheckIcon, CopyIcon, SendIcon } from './Icons.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
-
-function describeRoomMode(roomMediaMode) {
-  return roomMediaMode === 'video' ? 'Video room' : 'Voice room';
-}
 
 function RoomHeader({
   copyState,
@@ -12,10 +8,8 @@ function RoomHeader({
   onCopyRoomId,
   onShareInvite,
   onToggleTheme,
-  participantCount,
   roomCodeState,
   roomId,
-  roomMediaMode,
   shareState,
   theme,
 }) {
@@ -55,11 +49,6 @@ function RoomHeader({
           </div>
         </div>
         <ThemeToggle onToggleTheme={onToggleTheme} theme={theme} />
-      </div>
-
-      <div className="room-meta-row">
-        <span className="info-chip">{participantCount} people</span>
-        <span className="info-chip">{describeRoomMode(roomMediaMode)}</span>
       </div>
 
       <div className="invite-panel compact-panel">

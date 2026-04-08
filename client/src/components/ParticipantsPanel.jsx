@@ -1,4 +1,4 @@
-﻿function getPresenceChip(participant, roomMediaMode) {
+function getPresenceChip(participant, roomMediaMode) {
   if (participant.screenSharing) {
     return 'Screen live';
   }
@@ -23,9 +23,13 @@ function getInitials(name = '') {
   return `${first[0] || ''}${second[0] || ''}`.toUpperCase() || '?';
 }
 
-function ParticipantsPanel({ participants, roomMediaMode, selfParticipantId }) {
+function ParticipantsPanel({ embedded = false, participants, roomMediaMode, selfParticipantId }) {
+  const sectionClass = embedded
+    ? 'participants-panel sidebar-section'
+    : 'card participants-panel elevated-card';
+
   return (
-    <section className="card participants-panel elevated-card">
+    <section className={sectionClass}>
       <div className="panel-head">
         <div className="heading-group">
           <span className="eyebrow">People</span>

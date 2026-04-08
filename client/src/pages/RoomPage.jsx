@@ -33,15 +33,15 @@ function RoomPage({ onToggleTheme, theme }) {
   const participantIdRef = useRef(createParticipantId());
   const voiceEngineRef = useRef(null);
   const stagePanelRef = useRef(null);
+  const screenPanelRef = useRef(null);
   const watchPanelRef = useRef(null);
+  const railPanelRef = useRef(null);
 
   const roomId = sanitizeRoomId(routeRoomId);
   const requestedMediaMode = searchParams.get('mode') === 'video' ? 'video' : 'voice';
   const isHost = searchParams.get('host') === '1';
 
-  const [displayName, setDisplayName] = useState(
-    () => localStorage.getItem(STORAGE_KEY) || '',
-  );
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
   const [nameDraft, setNameDraft] = useState(displayName);
   const [copyState, setCopyState] = useState('Copy');
   const [roomCodeState, setRoomCodeState] = useState('Copy room');
@@ -73,14 +73,8 @@ function RoomPage({ onToggleTheme, theme }) {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [watchParty, setWatchParty] = useState(null);
+  const [watchPartyOpen, setWatchPartyOpen] = useState(false);
   const [focusedPanel, setFocusedPanel] = useState(null);
-  const [isPortraitViewport, setIsPortraitViewport] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    return window.innerHeight > window.innerWidth;
-  });
 
   const inviteLink = `${window.location.origin}/room/${roomId}`;
   const selfParticipant = {
@@ -92,12 +86,13 @@ function RoomPage({ onToggleTheme, theme }) {
     screenSharing,
     videoEnabled: cameraEnabled,
   };
+
+  const visibleParticipants = participants.length ? participants : [selfParticipant];
   const watchPartyActive = Boolean(watchParty?.videoId);
-  const watchPartyPriority = Boolean(watchParty?.videoId && watchParty?.status === 'playing');
-  const layoutFocus = focusedPanel || (watchPartyPriority ? 'watch' : null);
-  const showWatchFirst = watchPartyActive || layoutFocus === 'watch';
-  const stageInRail = watchPartyActive;
-  const portraitWatchLayout = watchPartyActive && isPortraitViewport;
+  const showWatchPanel = watchPartyOpen || watchPartyActive;
+  const anyScreenSharing = screenSharing || participants.some((participant) => participant.screenSharing);
+  const hasPriorityMedia = watchPartyActive || anyScreenSharing;
+  const showLiveRail = hasPriorityMedia && (roomMediaMode === 'video' || Boolean(localPreviewStream) || remoteStreams.length > 0);
 
   function applyLocalState(localState) {
     setMuted(!localState.audioEnabled);
@@ -115,10 +110,7 @@ function RoomPage({ onToggleTheme, theme }) {
       return;
     }
 
-    await voiceEngineRef.current?.reconnectParticipants(
-      participants,
-      participantIdRef.current,
-    );
+    await voiceEngineRef.current?.reconnectParticipants(participants, participantIdRef.current);
   }
 
   async function toggleFullscreen(targetRef) {
@@ -165,36 +157,20 @@ function RoomPage({ onToggleTheme, theme }) {
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
+    if (!watchPartyActive && focusedPanel === 'watch') {
+      setFocusedPanel(null);
     }
-
-    const syncViewportShape = () => {
-      setIsPortraitViewport(window.innerHeight > window.innerWidth);
-    };
-
-    syncViewportShape();
-    window.addEventListener('resize', syncViewportShape);
-
-    return () => {
-      window.removeEventListener('resize', syncViewportShape);
-    };
-  }, []);
+  }, [focusedPanel, watchPartyActive]);
 
   useEffect(() => {
-    if (watchPartyPriority) {
-      setFocusedPanel('watch');
-      return;
+    if (watchPartyActive) {
+      setWatchPartyOpen(true);
     }
-
-    if (!watchParty?.videoId) {
-      setFocusedPanel((currentFocus) => (currentFocus === 'watch' ? null : currentFocus));
-    }
-  }, [watchParty?.videoId, watchPartyPriority]);
+  }, [watchPartyActive]);
 
   useEffect(() => {
     if (!roomId) {
-      setError('Room code ไม่ถูกต้อง');
+      setError('Room code is missing');
       setIsBooting(false);
       return undefined;
     }
@@ -235,6 +211,7 @@ function RoomPage({ onToggleTheme, theme }) {
     setAvailableDevices({ audioInputs: [], videoInputs: [] });
     setSelectedDevices({ audioInputId: '', videoInputId: '' });
     setWatchParty(null);
+    setWatchPartyOpen(false);
     setFocusedPanel(null);
 
     async function bootRoom() {
@@ -277,7 +254,6 @@ function RoomPage({ onToggleTheme, theme }) {
         }
 
         setIsJoinedRoom(true);
-
         const nextRoomMediaMode = room?.metadata?.mediaMode || requestedMediaMode;
         setRoomMediaMode(nextRoomMediaMode);
         setWatchParty(room?.metadata?.watchParty || null);
@@ -376,10 +352,7 @@ function RoomPage({ onToggleTheme, theme }) {
       setParticipants(nextParticipants);
 
       if (selfPeerId) {
-        void voiceEngineRef.current?.syncParticipants(
-          nextParticipants,
-          participantIdRef.current,
-        );
+        void voiceEngineRef.current?.syncParticipants(nextParticipants, participantIdRef.current);
       }
     });
 
@@ -440,7 +413,6 @@ function RoomPage({ onToggleTheme, theme }) {
     }
   }
 
-
   async function handleCopyRoomId() {
     try {
       await navigator.clipboard.writeText(roomId);
@@ -478,9 +450,9 @@ function RoomPage({ onToggleTheme, theme }) {
       window.setTimeout(() => setShareState('Share'), 1800);
     }
   }
+
   function handleSaveName(event) {
     event.preventDefault();
-
     const cleanName = sanitizeDisplayName(nameDraft);
     localStorage.setItem(STORAGE_KEY, cleanName);
     setDisplayName(cleanName);
@@ -583,6 +555,22 @@ function RoomPage({ onToggleTheme, theme }) {
     }
 
     await clearWatchParty(roomId);
+    setWatchPartyOpen(false);
+    if (focusedPanel === 'watch') {
+      setFocusedPanel(null);
+    }
+  }
+
+  function handleToggleWatchParty() {
+    setWatchPartyOpen((current) => {
+      const nextValue = !current;
+
+      if (!nextValue && !watchPartyActive && focusedPanel === 'watch') {
+        setFocusedPanel(null);
+      }
+
+      return nextValue;
+    });
   }
 
   if (!isFirebaseReady()) {
@@ -629,7 +617,7 @@ function RoomPage({ onToggleTheme, theme }) {
         <section className="card status-card elevated-card">
           <span className="eyebrow">Room</span>
           <h1>Room closed</h1>
-          <p>สร้างห้องใหม่เพื่อเริ่มอีกครั้ง</p>
+          <p>This room is no longer active. Create a new room to continue.</p>
           <Link className="primary-button link-button" to="/">
             New room
           </Link>
@@ -638,13 +626,29 @@ function RoomPage({ onToggleTheme, theme }) {
     );
   }
 
-  const stagePanel = (
-    <div
-      className={`panel-shell stage-shell ${layoutFocus === 'stage' ? 'is-focused' : ''} ${stageInRail ? 'rail-mode' : ''}`}
-      ref={stagePanelRef}
-    >
+  const liveRailPanel = showLiveRail ? (
+    <div className={`panel-shell media-rail-shell ${focusedPanel === 'rail' ? 'is-focused' : ''}`} ref={railPanelRef}>
       <AudioStreamRack
-        isExpanded={layoutFocus === 'stage'}
+        isExpanded={focusedPanel === 'rail'}
+        layoutMode="rail"
+        localPreviewStream={localPreviewStream}
+        localScreenSharing={screenSharing}
+        localStream={localStream}
+        mediaMode={roomMediaMode}
+        onToggleExpand={() => setFocusedPanel((current) => (current === 'rail' ? null : 'rail'))}
+        onToggleFullscreen={() => {
+          void toggleFullscreen(railPanelRef);
+        }}
+        participants={participants}
+        remoteStreams={remoteStreams}
+      />
+    </div>
+  ) : null;
+
+  const stagePanel = (
+    <div className={`panel-shell stage-shell ${focusedPanel === 'stage' ? 'is-focused' : ''}`} ref={stagePanelRef}>
+      <AudioStreamRack
+        isExpanded={focusedPanel === 'stage'}
         localScreenSharing={screenSharing}
         localStream={localStream}
         localPreviewStream={localPreviewStream}
@@ -659,13 +663,29 @@ function RoomPage({ onToggleTheme, theme }) {
     </div>
   );
 
+  const screenPanel = anyScreenSharing ? (
+    <div className={`panel-shell screen-shell ${focusedPanel === 'screen' ? 'is-focused' : ''}`} ref={screenPanelRef}>
+      <AudioStreamRack
+        isExpanded={focusedPanel === 'screen'}
+        layoutMode="screen"
+        localScreenSharing={screenSharing}
+        localStream={localStream}
+        localPreviewStream={localPreviewStream}
+        mediaMode={roomMediaMode}
+        onToggleExpand={() => setFocusedPanel((current) => (current === 'screen' ? null : 'screen'))}
+        onToggleFullscreen={() => {
+          void toggleFullscreen(screenPanelRef);
+        }}
+        participants={participants}
+        remoteStreams={remoteStreams}
+      />
+    </div>
+  ) : null;
+
   const watchPanel = (
-    <div
-      className={`panel-shell watch-shell ${layoutFocus === 'watch' ? 'is-focused' : ''}`}
-      ref={watchPanelRef}
-    >
+    <div className={`panel-shell watch-shell ${watchPartyActive ? 'watch-live' : 'watch-idle'} ${focusedPanel === 'watch' ? 'is-focused' : ''}`} ref={watchPanelRef}>
       <WatchPartyPanel
-        isExpanded={layoutFocus === 'watch'}
+        isExpanded={focusedPanel === 'watch'}
         onClear={handleClearWatchParty}
         onSyncState={handleSyncWatchParty}
         onToggleExpand={() => setFocusedPanel((current) => (current === 'watch' ? null : 'watch'))}
@@ -678,6 +698,24 @@ function RoomPage({ onToggleTheme, theme }) {
     </div>
   );
 
+  const centerPanels = [];
+
+  if (watchPartyActive) {
+    centerPanels.push(watchPanel);
+  }
+
+  if (anyScreenSharing) {
+    centerPanels.push(screenPanel);
+  }
+
+  if (!hasPriorityMedia) {
+    centerPanels.push(stagePanel);
+  }
+
+  if (showWatchPanel && !watchPartyActive) {
+    centerPanels.push(watchPanel);
+  }
+
   return (
     <>
       <main className="room-page page-shell room-shell">
@@ -688,10 +726,8 @@ function RoomPage({ onToggleTheme, theme }) {
           onCopyRoomId={handleCopyRoomId}
           onShareInvite={handleShareInvite}
           onToggleTheme={onToggleTheme}
-          participantCount={participants.length || 1}
           roomCodeState={roomCodeState}
           roomId={roomId}
-          roomMediaMode={roomMediaMode}
           shareState={shareState}
           theme={theme}
         />
@@ -700,32 +736,27 @@ function RoomPage({ onToggleTheme, theme }) {
         {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
         {isBooting ? <p className="feedback">Connecting...</p> : null}
 
-        <div
-          className={`room-layout refined-room-layout studio-layout ${layoutFocus ? `focus-${layoutFocus}` : ''} ${watchPartyActive ? 'watch-active' : ''} ${portraitWatchLayout ? 'watch-portrait' : ''}`}
-        >
-          {portraitWatchLayout ? <div className="watch-hero-slot">{watchPanel}</div> : null}
-
-          <aside className="chat-rail">
-            {stageInRail ? stagePanel : null}
-            <div className="chat-slot">
-              <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
-                <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
-              </ChatProvider>
-            </div>
-          </aside>
-
-          {!portraitWatchLayout ? (
-            <div className={`primary-column main-stage-column ${showWatchFirst ? 'watch-dominant' : 'stage-dominant'}`}>
-              {showWatchFirst ? watchPanel : stagePanel}
-              {!stageInRail ? (showWatchFirst ? stagePanel : watchPanel) : null}
-            </div>
+        <div className={`room-studio ${hasPriorityMedia ? 'priority-media' : 'default-media'} ${showLiveRail ? 'show-rail' : 'hide-rail'} ${watchPartyActive ? 'watch-active' : 'watch-idle'} ${anyScreenSharing ? 'screen-active' : ''}`}>
+          {showLiveRail ? (
+            <aside className="studio-left-column">
+              {liveRailPanel}
+            </aside>
           ) : null}
 
-          <aside className="sidebar-column utility-column">
-            <div className="console-slot">
+          <section className="studio-center-column">
+            {centerPanels.map((panel, index) => (
+              <div className="studio-center-slot" key={index}>
+                {panel}
+              </div>
+            ))}
+          </section>
+
+          <aside className="studio-right-column">
+            <div className="card sidebar-hub elevated-card">
               <RoomConsole
                 cameraAvailable={cameraAvailable}
                 cameraEnabled={cameraEnabled}
+                embedded
                 mediaConnected={Boolean(selfPeerId && localStream)}
                 muted={muted}
                 onLeave={handleLeave}
@@ -742,19 +773,24 @@ function RoomPage({ onToggleTheme, theme }) {
                 onToggleScreenShare={() => {
                   void handleToggleScreenShare();
                 }}
+                onToggleWatchParty={handleToggleWatchParty}
                 roomMediaMode={roomMediaMode}
                 screenShareSupported={screenShareSupported}
                 screenSharing={screenSharing}
                 voiceStatus={voiceStatus}
+                watchPartyOpen={showWatchPanel}
               />
-            </div>
-            <div className="people-slot">
               <ParticipantsPanel
-                participants={participants.length ? participants : [selfParticipant]}
+                embedded
+                participants={visibleParticipants}
                 roomMediaMode={roomMediaMode}
                 selfParticipantId={participantIdRef.current}
               />
             </div>
+
+            <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
+              <ChatPanel compact disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
+            </ChatProvider>
           </aside>
         </div>
       </main>
@@ -778,16 +814,4 @@ function RoomPage({ onToggleTheme, theme }) {
 }
 
 export default RoomPage;
-
-
-
-
-
-
-
-
-
-
-
-
 

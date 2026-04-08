@@ -2,6 +2,7 @@
   ExitIcon,
   MicIcon,
   MicOffIcon,
+  PlayIcon,
   ScreenShareIcon,
   ScreenStopIcon,
   SettingsIcon,
@@ -12,6 +13,7 @@
 function RoomConsole({
   cameraAvailable,
   cameraEnabled,
+  embedded = false,
   mediaConnected,
   muted,
   onLeave,
@@ -19,25 +21,27 @@ function RoomConsole({
   onToggleCamera,
   onToggleMute,
   onToggleScreenShare,
+  onToggleWatchParty,
   roomMediaMode,
   screenShareSupported,
   screenSharing,
-  voiceStatus,
+  watchPartyOpen,
 }) {
+  const consoleCardClass = embedded
+    ? 'console-card sidebar-section'
+    : 'card console-card elevated-card';
+  const exitCardClass = embedded
+    ? 'exit-card sidebar-section'
+    : 'card exit-card elevated-card';
+
   return (
     <div className="console-stack">
-      <section className="card console-card elevated-card">
+      <section className={consoleCardClass}>
         <div className="panel-head">
           <div className="heading-group">
             <span className="eyebrow">Controls</span>
             <h2>Room</h2>
           </div>
-        </div>
-
-        <div className="status-pills">
-          <span className="status-pill">{voiceStatus}</span>
-          <span className="status-pill">{mediaConnected ? 'Signal live' : 'Chat only'}</span>
-          <span className="status-pill">{roomMediaMode === 'video' ? 'Video room' : 'Voice room'}</span>
         </div>
 
         <div className="icon-toolbar icon-toolbar-room">
@@ -56,7 +60,7 @@ function RoomConsole({
             <button
               aria-label={cameraEnabled ? 'Hide video' : 'Show video'}
               className="secondary-button icon-button control-icon"
-              disabled={!mediaConnected || !cameraAvailable || screenSharing}
+              disabled={!mediaConnected || !cameraAvailable}
               onClick={onToggleCamera}
               title={cameraEnabled ? 'Hide video' : 'Show video'}
               type="button"
@@ -77,6 +81,16 @@ function RoomConsole({
           </button>
 
           <button
+            aria-label={watchPartyOpen ? 'Hide shared video' : 'Open shared video'}
+            className={`secondary-button icon-button control-icon ${watchPartyOpen ? 'is-active' : ''}`}
+            onClick={onToggleWatchParty}
+            title={watchPartyOpen ? 'Hide shared video' : 'Shared video'}
+            type="button"
+          >
+            <PlayIcon />
+          </button>
+
+          <button
             aria-label="Open media settings"
             className="secondary-button icon-button control-icon"
             onClick={onOpenSettings}
@@ -92,7 +106,7 @@ function RoomConsole({
         ) : null}
       </section>
 
-      <section className="card exit-card elevated-card">
+      <section className={exitCardClass}>
         <div className="panel-head panel-head-spacious">
           <div className="heading-group">
             <span className="eyebrow">Exit</span>

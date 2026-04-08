@@ -1,4 +1,4 @@
-﻿import Peer from 'peerjs';
+import Peer from 'peerjs';
 
 function buildPeerConfig() {
   const secure = import.meta.env.VITE_PEER_SECURE === 'true';
@@ -34,10 +34,15 @@ function buildParticipantMediaKey(participant) {
   ].join(':');
 }
 
+function trackExists(stream, track) {
+  return stream.getTracks().some((entry) => entry.id === track.id);
+}
+
 export class VoiceEngine {
   constructor(callbacks = {}) {
     this.callbacks = callbacks;
     this.calls = new Map();
+    this.remoteMediaStreams = new Map();
     this.localParticipantId = '';
     this.localStream = null;
     this.localMediaMode = 'voice';
@@ -56,6 +61,8 @@ export class VoiceEngine {
     this.cameraSourceStream = null;
     this.screenStream = null;
     this.isScreenSharing = false;
+    this.audioEnabledPreference = true;
+    this.cameraEnabledPreference = true;
     this.deviceChangeHandler = null;
   }
 
@@ -200,7 +207,7 @@ export class VoiceEngine {
     }
   }
 
-  async buildCompositeStream({ mediaMode = this.localMediaMode } = {}) {
+  async buildCompositeStream({ mediaMode = this.localMediaMode, forceRefreshCamera = false } = {}) {
     const audioSourceStream = await this.requestUserMedia(
       {
         audio: this.buildAudioConstraint(),
@@ -212,10 +219,11 @@ export class VoiceEngine {
       },
     );
 
-    let cameraSourceStream = this.screenStream ? this.cameraSourceStream : null;
-    let videoTrack = this.screenStream?.getVideoTracks()?.[0] || null;
+    const screenTrack = this.screenStream?.getVideoTracks()?.[0] || null;
+    const shouldIncludeCamera = mediaMode === 'video';
+    let cameraSourceStream = shouldIncludeCamera ? this.cameraSourceStream : null;
 
-    if (mediaMode === 'video' && !videoTrack) {
+    if (shouldIncludeCamera && (!cameraSourceStream || forceRefreshCamera)) {
       cameraSourceStream = await this.requestUserMedia(
         {
           audio: false,
@@ -228,8 +236,12 @@ export class VoiceEngine {
       );
     }
 
-    if (!videoTrack && cameraSourceStream) {
-      videoTrack = cameraSourceStream.getVideoTracks()[0] || null;
+    for (const track of audioSourceStream.getAudioTracks()) {
+      track.enabled = this.audioEnabledPreference;
+    }
+
+    for (const track of cameraSourceStream?.getVideoTracks?.() || []) {
+      track.enabled = this.cameraEnabledPreference;
     }
 
     const stream = new MediaStream();
@@ -238,8 +250,12 @@ export class VoiceEngine {
       stream.addTrack(track);
     }
 
-    if (videoTrack) {
-      stream.addTrack(videoTrack);
+    for (const track of cameraSourceStream?.getVideoTracks?.() || []) {
+      stream.addTrack(track);
+    }
+
+    if (screenTrack) {
+      stream.addTrack(screenTrack);
     }
 
     return {
@@ -303,7 +319,10 @@ export class VoiceEngine {
     this.mediaUnavailable = false;
     this.localMediaMode = mediaMode;
 
-    const nextMedia = await this.buildCompositeStream({ mediaMode });
+    const nextMedia = await this.buildCompositeStream({
+      mediaMode,
+      forceRefreshCamera: mediaMode === 'video',
+    });
     this.commitLocalMedia(nextMedia);
     await this.refreshDevices();
     return this.getLocalState();
@@ -359,13 +378,16 @@ export class VoiceEngine {
   getLocalState() {
     const audioTracks = this.localStream?.getAudioTracks() || [];
     const videoTracks = this.localStream?.getVideoTracks() || [];
+    const cameraTracks = this.cameraSourceStream?.getVideoTracks() || [];
 
     return {
       audioEnabled: audioTracks.some((track) => track.enabled),
-      cameraAvailable: this.availableDevices.videoInputs.length > 0,
-      hasVideoTrack: videoTracks.length > 0,
+      cameraAvailable: this.availableDevices.videoInputs.length > 0 || cameraTracks.length > 0,
+      hasVideoTrack: videoTracks.length > 0 || cameraTracks.length > 0,
       screenSharing: this.isScreenSharing,
-      videoEnabled: videoTracks.some((track) => track.enabled),
+      videoEnabled: this.isScreenSharing
+        ? cameraTracks.some((track) => track.enabled)
+        : videoTracks.some((track) => track.enabled),
       ...this.getPreferredDevices(),
     };
   }
@@ -376,6 +398,7 @@ export class VoiceEngine {
     }
 
     this.calls.clear();
+    this.remoteMediaStreams.clear();
   }
 
   async reconnectParticipants(participants, selfParticipantId) {
@@ -452,10 +475,13 @@ export class VoiceEngine {
 
       record.call.close();
       this.calls.delete(participantId);
+      this.remoteMediaStreams.delete(participantId);
     }
   }
 
   setMuted(muted) {
+    this.audioEnabledPreference = !muted;
+
     if (!this.localStream) {
       return this.getLocalState();
     }
@@ -469,11 +495,15 @@ export class VoiceEngine {
   }
 
   setCameraEnabled(enabled) {
-    if (!this.localStream || this.isScreenSharing) {
+    this.cameraEnabledPreference = enabled;
+
+    if (!this.localStream) {
       return this.getLocalState();
     }
 
-    const videoTracks = this.localStream.getVideoTracks();
+    const videoTracks = this.isScreenSharing
+      ? (this.cameraSourceStream?.getVideoTracks() || [])
+      : this.localStream.getVideoTracks();
 
     if (videoTracks.length === 0) {
       return this.getLocalState();
@@ -485,6 +515,64 @@ export class VoiceEngine {
 
     this.callbacks.onStatusChange?.(enabled ? 'Camera on' : 'Camera off');
     return this.getLocalState();
+  }
+
+  getOrCreateRemoteMediaStream(participantId) {
+    if (this.remoteMediaStreams.has(participantId)) {
+      return this.remoteMediaStreams.get(participantId);
+    }
+
+    const stream = new MediaStream();
+    this.remoteMediaStreams.set(participantId, stream);
+    return stream;
+  }
+
+  emitRemoteMediaStream(participantId) {
+    const stream = this.remoteMediaStreams.get(participantId);
+
+    if (!stream) {
+      return;
+    }
+
+    this.callbacks.onRemoteStream?.({
+      participantId,
+      stream,
+    });
+  }
+
+  mergeRemoteTrack(participantId, track) {
+    if (!track) {
+      return;
+    }
+
+    const stream = this.getOrCreateRemoteMediaStream(participantId);
+    const alreadyAdded = trackExists(stream, track);
+
+    if (!alreadyAdded) {
+      stream.addTrack(track);
+      track.addEventListener?.('ended', () => {
+        const currentStream = this.remoteMediaStreams.get(participantId);
+
+        if (!currentStream || !trackExists(currentStream, track)) {
+          return;
+        }
+
+        currentStream.removeTrack(track);
+        this.emitRemoteMediaStream(participantId);
+      }, { once: true });
+    }
+
+    this.emitRemoteMediaStream(participantId);
+  }
+
+  mergeRemoteStream(participantId, stream) {
+    if (!stream) {
+      return;
+    }
+
+    for (const track of stream.getTracks()) {
+      this.mergeRemoteTrack(participantId, track);
+    }
   }
 
   destroy() {
@@ -521,25 +609,45 @@ export class VoiceEngine {
       currentRecord.call.close();
     }
 
+    const peerConnection = call.peerConnection || null;
+    let handleTrack = null;
+
+    if (peerConnection?.addEventListener) {
+      handleTrack = (event) => {
+        if (event.streams?.length) {
+          for (const remoteStream of event.streams) {
+            this.mergeRemoteStream(participantId, remoteStream);
+          }
+          return;
+        }
+
+        this.mergeRemoteTrack(participantId, event.track);
+      };
+
+      peerConnection.addEventListener('track', handleTrack);
+    }
+
     this.calls.set(participantId, {
       call,
       mediaKey,
     });
 
     call.on('stream', (stream) => {
-      this.callbacks.onRemoteStream?.({
-        participantId,
-        stream,
-      });
+      this.mergeRemoteStream(participantId, stream);
     });
 
     call.on('close', () => {
       const current = this.calls.get(participantId);
 
+      if (handleTrack && peerConnection?.removeEventListener) {
+        peerConnection.removeEventListener('track', handleTrack);
+      }
+
       if (current?.call === call) {
         this.calls.delete(participantId);
       }
 
+      this.remoteMediaStreams.delete(participantId);
       this.callbacks.onRemoteDisconnect?.(participantId);
     });
 
