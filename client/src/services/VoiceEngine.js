@@ -1,11 +1,43 @@
-import Peer from 'peerjs';
+﻿import Peer from 'peerjs';
+
+function normalizePeerHost(value) {
+  if (!value) {
+    return window.location.hostname;
+  }
+
+  const trimmedValue = String(value).trim();
+
+  try {
+    if (trimmedValue.startsWith('http://') || trimmedValue.startsWith('https://')) {
+      return new URL(trimmedValue).hostname;
+    }
+  } catch {
+    return trimmedValue;
+  }
+
+  return trimmedValue;
+}
+
+function resolvePeerSecure() {
+  const envValue = import.meta.env.VITE_PEER_SECURE;
+
+  if (envValue === 'true') {
+    return true;
+  }
+
+  if (envValue === 'false') {
+    return false;
+  }
+
+  return window.location.protocol === 'https:';
+}
 
 function buildPeerConfig() {
-  const secure = import.meta.env.VITE_PEER_SECURE === 'true';
+  const secure = resolvePeerSecure();
 
   return {
     debug: 1,
-    host: import.meta.env.VITE_PEER_HOST || window.location.hostname,
+    host: normalizePeerHost(import.meta.env.VITE_PEER_HOST),
     path: import.meta.env.VITE_PEER_PATH || '/peerjs',
     port: Number(import.meta.env.VITE_PEER_PORT || (secure ? 443 : 3001)),
     secure,
@@ -90,7 +122,13 @@ export class VoiceEngine {
     });
 
     this.peerId = await new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('Signal timeout'));
+      }, 10000);
+
       const cleanup = () => {
+        window.clearTimeout(timeoutId);
         peer.off('error', handleError);
         peer.off('open', handleOpen);
       };
@@ -656,3 +694,4 @@ export class VoiceEngine {
     });
   }
 }
+
