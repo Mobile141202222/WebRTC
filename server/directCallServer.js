@@ -558,6 +558,8 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
       return;
     }
 
+    console.log(`[direct-call] upgrade request for ${requestUrl.pathname} from ${request.headers.origin || 'unknown-origin'}`);
+
     wsServer.handleUpgrade(request, socket, head, (ws) => {
       wsServer.emit('connection', ws);
     });
@@ -566,8 +568,10 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
   wsServer.on('connection', (ws) => {
     const socketId = randomUUID();
     let socketContext = null;
+    console.log(`[direct-call] socket connected ${socketId}`);
     const authTimeoutId = setTimeout(() => {
       if (!socketContext) {
+        console.warn(`[direct-call] auth timeout ${socketId}`);
         ws.close(4401, 'Authentication timeout');
       }
     }, 8_000);
@@ -585,6 +589,7 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
 
       if (!socketContext) {
         if (message.type !== 'auth') {
+          console.warn(`[direct-call] auth required before event ${message.type} on ${socketId}`);
           ws.close(4401, 'Authentication required');
           return;
         }
@@ -608,6 +613,7 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
             ws,
           });
           clearTimeout(authTimeoutId);
+          console.log(`[direct-call] auth success ${socketId} user=${authContext.userId}`);
 
           sendJson(ws, buildSocketEvent('auth-success', {
             socketId,
@@ -618,6 +624,7 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
           }));
           deliverPendingCalls(socketContext);
         } catch (error) {
+          console.warn(`[direct-call] auth failed ${socketId}: ${error.message || 'Authentication failed'}`);
           ws.close(4401, error.message || 'Authentication failed');
         }
 
@@ -627,8 +634,10 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
       handleSocketMessage(socketContext, message);
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reasonBuffer) => {
       clearTimeout(authTimeoutId);
+      const reason = reasonBuffer?.toString?.('utf8') || '';
+      console.log(`[direct-call] socket closed ${socketId} code=${code} reason=${reason || 'n/a'}`);
 
       const { disconnectedCalls } = store.unregisterConnection(socketId);
 
@@ -650,6 +659,10 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
           sendToUser(call.calleeUserId, endEvent);
         }
       }
+    });
+
+    ws.on('error', (error) => {
+      console.error(`[direct-call] socket error ${socketId}:`, error);
     });
   });
 }

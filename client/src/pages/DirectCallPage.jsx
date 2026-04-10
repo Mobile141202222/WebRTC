@@ -316,6 +316,12 @@ function DirectCallPage({ onToggleTheme, theme }) {
 
           if (event.code === 4401) {
             setAuthError(event.reason || 'Authentication failed');
+            setCallError(`Socket closed (${event.code}): ${event.reason || 'Authentication failed'}`);
+            return;
+          }
+
+          if (event.code && event.code !== 1000) {
+            setCallError(`Socket closed (${event.code}): ${event.reason || 'No close reason provided'}`);
           }
         },
         onConnectionStateChange: (state) => {
@@ -330,7 +336,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
             return;
           }
 
-          setCallError('Signal socket reported an error.');
+          setCallError('Signal socket reported an error. Check Render logs for the matching close reason.');
         },
         onEvent: (event) => {
           if (!active) {
