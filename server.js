@@ -37,6 +37,16 @@ const httpServer = app.listen(config.serverPort, () => {
   console.log(`Ephemeral chat server listening on http://localhost:${config.serverPort}`);
 });
 
+createDirectCallServer({
+  app,
+  authConfig: config.auth,
+  callConfig: config.calls,
+  httpServer,
+  pushConfig: config.push,
+  turnConfig: config.turn,
+  wsPath: config.directCallWsPath,
+});
+
 const peerServer = ExpressPeerServer(httpServer, {
   path: '/',
   generateClientId: () => randomUUID(),
@@ -51,16 +61,6 @@ peerServer.on('disconnect', (client) => {
 });
 
 app.use(config.peerPath, peerServer);
-
-createDirectCallServer({
-  app,
-  authConfig: config.auth,
-  callConfig: config.calls,
-  httpServer,
-  pushConfig: config.push,
-  turnConfig: config.turn,
-  wsPath: config.directCallWsPath,
-});
 
 if (fs.existsSync(config.buildDirectory)) {
   app.use(express.static(config.buildDirectory));
