@@ -1,4 +1,4 @@
-﻿import {
+import {
   get,
   onDisconnect,
   onValue,
@@ -299,23 +299,29 @@ export function messagesCollection(roomId) {
   return messagesRef(database, roomId);
 }
 
-export async function appendMessage({ roomId, participant, text }) {
+export async function appendMessage({ roomId, participant, text, imageUrl }) {
   const database = assertFirebaseConfigured();
-  const cleanMessage = sanitizeMessage(text);
+  const cleanMessage = sanitizeMessage(text) || '';
 
-  if (!cleanMessage) {
+  if (!cleanMessage && !imageUrl) {
     return null;
   }
 
   const nextMessageRef = push(messagesRef(database, roomId));
   const now = Date.now();
 
-  await set(nextMessageRef, {
+  const messageData = {
     participantId: participant.id,
     text: cleanMessage,
     time: now,
     user: sanitizeDisplayName(participant.name),
-  });
+  };
+
+  if (imageUrl) {
+    messageData.imageUrl = imageUrl;
+  }
+
+  await set(nextMessageRef, messageData);
 
   await extendRoomLifetime(database, roomId, now);
 

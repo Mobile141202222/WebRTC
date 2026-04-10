@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CollapseWideIcon, ExpandWideIcon, FullscreenIcon } from './Icons.jsx';
+import { CollapseWideIcon, ExpandWideIcon, FullscreenIcon, MicOffIcon } from './Icons.jsx';
 
 function getInitials(label = '') {
   const [first = '?', second = ''] = label.trim().split(/\s+/);
@@ -220,6 +220,11 @@ function MediaTile({ compact = false, entry, featured = false }) {
         </div>
         <div className="media-side-meta">
           <AudioLevelMeter level={level} />
+          {!entry.screenSharing && entry.audioEnabled === false ? (
+            <div title="Muted" style={{ display: 'grid', placeItems: 'center', background: 'var(--danger-surface)', color: 'var(--danger-text)', borderRadius: '50%', width: '22px', height: '22px', border: '1px solid currentColor' }}>
+              <MicOffIcon style={{ width: '12px', height: '12px' }} />
+            </div>
+          ) : null}
           <span className="media-badge">{entry.screenSharing ? 'Screen live' : hasVideoTrack ? 'Video' : 'Audio'}</span>
         </div>
       </div>
@@ -227,7 +232,7 @@ function MediaTile({ compact = false, entry, featured = false }) {
   );
 }
 
-function createSplitEntries({ id, label, muted, role, screenSharing, stream, previewStream = null }) {
+function createSplitEntries({ id, label, muted, role, screenSharing, stream, previewStream = null, audioEnabled = true, videoEnabled = false }) {
   const audioTracks = stream?.getAudioTracks() || [];
   const videoTracks = stream?.getVideoTracks() || [];
   const screenTrack = getScreenTrack(videoTracks, screenSharing);
@@ -242,6 +247,8 @@ function createSplitEntries({ id, label, muted, role, screenSharing, stream, pre
         role: 'Screen share',
         screenSharing: true,
         stream: buildDisplayStream({ audioTracks, videoTrack: screenTrack }),
+        audioEnabled,
+        videoEnabled,
       },
     ];
 
@@ -253,6 +260,8 @@ function createSplitEntries({ id, label, muted, role, screenSharing, stream, pre
         role: 'Webcam',
         screenSharing: false,
         stream: buildDisplayStream({ videoTrack: cameraTrack }),
+        audioEnabled,
+        videoEnabled,
       });
     }
 
@@ -267,11 +276,13 @@ function createSplitEntries({ id, label, muted, role, screenSharing, stream, pre
       role,
       screenSharing: false,
       stream,
+      audioEnabled,
+      videoEnabled,
     },
   ];
 }
 
-function buildEntries({ localPreviewStream, localScreenSharing, localStream, participants, remoteStreams }) {
+function buildEntries({ localPreviewStream, localScreenSharing, localStream, localAudioEnabled, localVideoEnabled, participants, remoteStreams }) {
   const entries = [];
 
   if (localStream) {
@@ -284,6 +295,8 @@ function buildEntries({ localPreviewStream, localScreenSharing, localStream, par
         role: localScreenSharing ? 'Screen share' : 'Local',
         screenSharing: localScreenSharing,
         stream: localStream,
+        audioEnabled: localAudioEnabled ?? true,
+        videoEnabled: localVideoEnabled ?? false,
       }),
     );
   }
@@ -299,6 +312,8 @@ function buildEntries({ localPreviewStream, localScreenSharing, localStream, par
         role: participant?.screenSharing ? 'Screen share' : 'Remote',
         screenSharing: Boolean(participant?.screenSharing),
         stream: remoteStream.stream,
+        audioEnabled: participant?.audioEnabled ?? true,
+        videoEnabled: participant?.videoEnabled ?? false,
       }),
     );
   }
@@ -324,6 +339,8 @@ function AudioStreamRack({
   localPreviewStream = null,
   localScreenSharing = false,
   localStream,
+  localAudioEnabled,
+  localVideoEnabled,
   mediaMode,
   onToggleExpand,
   onToggleFullscreen,
@@ -334,12 +351,15 @@ function AudioStreamRack({
     localPreviewStream,
     localScreenSharing,
     localStream,
+    localAudioEnabled,
+    localVideoEnabled,
     participants,
     remoteStreams,
   });
   const liveCount = entries.length;
   const featuredEntry = entries.find((entry) => entry.screenSharing) || null;
   const railEntries = entries.filter((entry) => !entry.screenSharing);
+  const isSoloSelfStage = entries.length === 1 && entries[0]?.id === 'local';
 
   if (layoutMode === 'rail') {
     return (
@@ -422,7 +442,7 @@ function AudioStreamRack({
   }
 
   return (
-    <section className="card media-stage elevated-card">
+    <section className={`card media-stage elevated-card ${isSoloSelfStage ? 'solo-self-stage' : ''}`}>
       <div className="panel-head">
         <div className="heading-group">
           <span className="eyebrow">Stage</span>

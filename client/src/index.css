@@ -1,27 +1,27 @@
-﻿:root {
+:root {
   color-scheme: light;
-  --bg-base: #f3f6fb;
-  --bg-gradient: linear-gradient(180deg, #f7f9fd 0%, #eef3fb 48%, #f3f5f8 100%);
-  --hero-start: #101a31;
-  --hero-end: #1c4fa3;
-  --hero-text: #f7f9fd;
-  --panel-strong: rgba(255, 255, 255, 0.82);
-  --panel-muted: rgba(244, 247, 252, 0.92);
-  --secondary-surface: rgba(44, 101, 214, 0.08);
-  --surface-strong: rgba(232, 238, 248, 0.96);
+  --bg-base: #f1f5f9;
+  --bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 48%, #e2e8f0 100%);
+  --hero-start: #0f172a;
+  --hero-end: #1e3a8a; /* Dark blue */
+  --hero-text: #f8fafc;
+  --panel-strong: rgba(255, 255, 255, 0.9);
+  --panel-muted: rgba(248, 250, 252, 0.95);
+  --secondary-surface: rgba(15, 23, 42, 0.05);
+  --surface-strong: rgba(255, 255, 255, 1);
   --border-soft: rgba(15, 23, 42, 0.08);
   --text-strong: #0f172a;
-  --text-muted: #64748b;
-  --text-soft: #7c8da8;
-  --accent: #4f8cff;
-  --accent-strong: #2d72ea;
-  --accent-soft: rgba(79, 140, 255, 0.22);
-  --accent-surface: rgba(79, 140, 255, 0.12);
-  --danger-surface: rgba(255, 96, 96, 0.12);
-  --danger-text: #c23b3b;
-  --shadow-soft: 0 18px 44px rgba(22, 34, 58, 0.08);
-  --shadow-elevated: 0 24px 60px rgba(16, 28, 52, 0.1);
-  font-family: 'Aptos', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  --text-muted: #475569;
+  --text-soft: #64748b;
+  --accent: #1d4ed8;       /* Dark Blue */
+  --accent-strong: #1e3a8a; /* Deep Dark Blue */
+  --accent-soft: rgba(29, 78, 216, 0.15);
+  --accent-surface: rgba(29, 78, 216, 0.08);
+  --danger-surface: rgba(239, 68, 68, 0.12);
+  --danger-text: #dc2626;
+  --shadow-soft: 0 4px 20px rgba(15, 23, 42, 0.06);
+  --shadow-elevated: 0 10px 40px rgba(15, 23, 42, 0.1);
+  font-family: 'Inter', 'Aptos', 'Segoe UI Variable', 'Segoe UI', sans-serif;
   font-synthesis: none;
   font-weight: 400;
   line-height: 1.5;
@@ -32,27 +32,27 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg-base: #08111f;
-  --bg-gradient: linear-gradient(180deg, #08111f 0%, #0c1524 44%, #0a1320 100%);
-  --hero-start: #0f1729;
-  --hero-end: #244d9b;
-  --hero-text: #f5f7fb;
-  --panel-strong: rgba(13, 20, 34, 0.78);
-  --panel-muted: rgba(17, 26, 43, 0.92);
-  --secondary-surface: rgba(93, 134, 214, 0.12);
-  --surface-strong: rgba(20, 31, 49, 0.96);
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --text-strong: #edf3ff;
-  --text-muted: #90a1bb;
-  --text-soft: #8ea1c0;
-  --accent: #73a7ff;
-  --accent-strong: #4b89f0;
-  --accent-soft: rgba(115, 167, 255, 0.18);
-  --accent-surface: rgba(115, 167, 255, 0.12);
-  --danger-surface: rgba(255, 117, 117, 0.18);
-  --danger-text: #ffb3b3;
-  --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.26);
-  --shadow-elevated: 0 26px 72px rgba(0, 0, 0, 0.3);
+  --bg-base: #1e1f22; /* Discord app bg */
+  --bg-gradient: linear-gradient(180deg, #1e1f22 0%, #17181a 100%);
+  --hero-start: #111214;
+  --hero-end: #1e3a8a; /* Dark Blue end */
+  --hero-text: #f8fafc;
+  --panel-strong: #313338; /* Discord panel */
+  --panel-muted: #2b2d31; /* Discord sidebar */
+  --secondary-surface: rgba(255, 255, 255, 0.05);
+  --surface-strong: #232428;
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --text-strong: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-soft: #64748b;
+  --accent: #2563eb;       /* Blue */
+  --accent-strong: #1d4ed8; /* Dark Blue */
+  --accent-soft: rgba(37, 99, 235, 0.2);
+  --accent-surface: rgba(37, 99, 235, 0.1);
+  --danger-surface: rgba(248, 113, 113, 0.15);
+  --danger-text: #fca5a5;
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 15px 50px rgba(0, 0, 0, 0.5);
 }
 
 * {

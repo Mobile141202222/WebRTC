@@ -34,7 +34,7 @@ export function ChatProvider({ roomId, participant, children }) {
     );
   }, [roomId]);
 
-  async function sendMessage(text) {
+  async function sendMessage({ text, imageUrl }) {
     if (!participant) {
       return false;
     }
@@ -43,6 +43,7 @@ export function ChatProvider({ roomId, participant, children }) {
       participant,
       roomId,
       text,
+      imageUrl,
     });
 
     return Boolean(messageId);

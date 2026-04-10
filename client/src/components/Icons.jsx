@@ -1,4 +1,4 @@
-﻿function IconBase({ children, className = 'button-icon', viewBox = '0 0 24 24' }) {
+function IconBase({ children, className = 'button-icon', viewBox = '0 0 24 24' }) {
   return (
     <svg
       aria-hidden="true"
@@ -261,6 +261,24 @@ export function FullscreenIcon(props) {
       <path d="m21 3-6 6" />
       <path d="m3 21 6-6" />
       <path d="m21 21-6-6" />
+    </IconBase>
+  );
+}
+
+export function ChatIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </IconBase>
+  );
+}
+
+export function ImageIcon(props) {
+  return (
+    <IconBase {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
     </IconBase>
   );
 }

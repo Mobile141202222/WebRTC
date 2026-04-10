@@ -1,0 +1,54 @@
+# Ephemeral Voice & Text Chat
+
+React frontend + Firebase Realtime Database + PeerJS signaling server for short-lived voice, video, screen share, and text rooms.
+
+## Structure
+
+- `client/` - React + Vite frontend
+- `server.js` - Express server with PeerJS signaling and production static serving
+- `client/src/services/RoomManager.js` - room, participant, and message lifecycle
+- `client/src/providers/ChatProvider.jsx` - realtime message subscription with `onChildAdded`
+- `client/src/services/VoiceEngine.js` - PeerJS/WebRTC media mesh management
+- `client/src/hooks/CleanupHook.js` - `onDisconnect()` registration for presence cleanup
+
+## Local setup
+
+1. Copy `client/.env.example` to `client/.env`
+2. Fill in Firebase Realtime Database credentials
+3. Copy `.env.example` to `.env` if you want to change the backend port or PeerJS path
+4. Install dependencies:
+
+```powershell
+npm.cmd install --cache .npm-cache
+npm.cmd --prefix client install --cache ..\\.npm-cache
+```
+
+5. Run the app:
+
+```powershell
+npm.cmd run dev
+```
+
+Frontend defaults to `http://localhost:5173` and the PeerJS/Express server defaults to `http://localhost:3001`.
+
+## Workflow
+
+1. Landing page creates a room ID or joins an existing invite
+2. Host writes room metadata and participant presence into Firebase
+3. Guests join the same room node and publish their peer IDs
+4. Messages sync through Firebase in real time
+5. Media connections are established directly between browsers through PeerJS/WebRTC
+6. Explicit leave removes the participant and deletes the room if it becomes empty
+7. Browser close uses Firebase `onDisconnect()` as a fallback cleanup path
+
+## Render free plan
+
+- The backend already exposes `GET /api/health`
+- If your free Render service sleeps, use an external uptime monitor to call `/api/health` every 10-15 minutes
+- A timer inside the same sleeping Render instance will not wake the service back up after Render suspends it
+
+## Notes
+
+- WebRTC exposes network information by design. Add a TURN server if you need stricter privacy or better NAT traversal.
+- `onDisconnect()` is best-effort. For production, add a scheduled Firebase cleanup job for stale rooms older than 24 hours.
+- React escapes rendered text, and the app also trims and sanitizes names and messages before storing them.

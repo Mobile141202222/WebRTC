@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useChat } from '../hooks/useChat.js';
 import ChatComposer from './ChatComposer.jsx';
 
@@ -25,7 +25,7 @@ function ChatPanel({ compact = false, disabled, selfParticipantId }) {
   }, [messages]);
 
   return (
-    <section className={`card chat-panel elevated-card ${compact ? 'compact-chat' : ''}`}>
+    <section className={`card chat-panel elevated-card ${compact ? 'compact-chat' : 'studio-chat-v2'}`}>
       <div className="panel-head">
         <div className="heading-group">
           <span className="eyebrow">Chat</span>
@@ -45,11 +45,25 @@ function ChatPanel({ compact = false, disabled, selfParticipantId }) {
 
             return (
               <div className={`message-row ${isOwn ? 'own' : 'other'}`} key={message.id}>
-                <article className={`message-card refined-card ${isOwn ? 'own' : 'other'}`}>
+                <div className="message-content">
                   <span className="message-author">{isOwn ? 'You' : message.user}</span>
-                  <p>{message.text}</p>
-                  <time>{formatMessageTime(message.time)}</time>
-                </article>
+                  <article className={`message-card refined-card ${isOwn ? 'own' : 'other'}`} style={(!message.text && message.imageUrl) ? { padding: '6px' } : {}}>
+                    {message.imageUrl && (
+                      <img src={message.imageUrl} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: message.text ? '8px' : '0', display: 'block' }} />
+                    )}
+                    {message.text && <p>{message.text}</p>}
+                  </article>
+                  {message.imageUrl ? (
+                    <a
+                      className="message-download"
+                      download={`meeting-image-${message.time || message.id}.jpg`}
+                      href={message.imageUrl}
+                    >
+                      Save image
+                    </a>
+                  ) : null}
+                  <time className="message-time">{formatMessageTime(message.time)}</time>
+                </div>
               </div>
             );
           })

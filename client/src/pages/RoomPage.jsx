@@ -1,9 +1,8 @@
-﻿import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AudioStreamRack from '../components/AudioStreamRack.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
 import MediaSettingsModal from '../components/MediaSettingsModal.jsx';
-import ParticipantsPanel from '../components/ParticipantsPanel.jsx';
 import RoomConsole from '../components/RoomConsole.jsx';
 import RoomHeader from '../components/RoomHeader.jsx';
 import WatchPartyPanel from '../components/WatchPartyPanel.jsx';
@@ -74,6 +73,7 @@ function RoomPage({ onToggleTheme, theme }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [watchParty, setWatchParty] = useState(null);
   const [watchPartyOpen, setWatchPartyOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [focusedPanel, setFocusedPanel] = useState(null);
 
   const inviteLink = `${window.location.origin}/room/${roomId}`;
@@ -87,7 +87,6 @@ function RoomPage({ onToggleTheme, theme }) {
     videoEnabled: cameraEnabled,
   };
 
-  const visibleParticipants = participants.length ? participants : [selfParticipant];
   const watchPartyActive = Boolean(watchParty?.videoId);
   const showWatchPanel = watchPartyOpen || watchPartyActive;
   const anyScreenSharing = screenSharing || participants.some((participant) => participant.screenSharing);
@@ -212,6 +211,7 @@ function RoomPage({ onToggleTheme, theme }) {
     setSelectedDevices({ audioInputId: '', videoInputId: '' });
     setWatchParty(null);
     setWatchPartyOpen(false);
+    setChatOpen(false);
     setFocusedPanel(null);
 
     async function bootRoom() {
@@ -634,6 +634,8 @@ function RoomPage({ onToggleTheme, theme }) {
         localPreviewStream={localPreviewStream}
         localScreenSharing={screenSharing}
         localStream={localStream}
+        localAudioEnabled={!muted}
+        localVideoEnabled={cameraEnabled}
         mediaMode={roomMediaMode}
         onToggleExpand={() => setFocusedPanel((current) => (current === 'rail' ? null : 'rail'))}
         onToggleFullscreen={() => {
@@ -652,6 +654,8 @@ function RoomPage({ onToggleTheme, theme }) {
         localScreenSharing={screenSharing}
         localStream={localStream}
         localPreviewStream={localPreviewStream}
+        localAudioEnabled={!muted}
+        localVideoEnabled={cameraEnabled}
         mediaMode={roomMediaMode}
         onToggleExpand={() => setFocusedPanel((current) => (current === 'stage' ? null : 'stage'))}
         onToggleFullscreen={() => {
@@ -671,6 +675,8 @@ function RoomPage({ onToggleTheme, theme }) {
         localScreenSharing={screenSharing}
         localStream={localStream}
         localPreviewStream={localPreviewStream}
+        localAudioEnabled={!muted}
+        localVideoEnabled={cameraEnabled}
         mediaMode={roomMediaMode}
         onToggleExpand={() => setFocusedPanel((current) => (current === 'screen' ? null : 'screen'))}
         onToggleFullscreen={() => {
@@ -712,10 +718,6 @@ function RoomPage({ onToggleTheme, theme }) {
     centerPanels.push(stagePanel);
   }
 
-  if (showWatchPanel && !watchPartyActive) {
-    centerPanels.push(watchPanel);
-  }
-
   return (
     <>
       <main className="room-page page-shell room-shell">
@@ -736,7 +738,7 @@ function RoomPage({ onToggleTheme, theme }) {
         {infoMessage ? <p className="feedback subtle">{infoMessage}</p> : null}
         {isBooting ? <p className="feedback">Connecting...</p> : null}
 
-        <div className={`room-studio ${hasPriorityMedia ? 'priority-media' : 'default-media'} ${showLiveRail ? 'show-rail' : 'hide-rail'} ${watchPartyActive ? 'watch-active' : 'watch-idle'} ${anyScreenSharing ? 'screen-active' : ''}`}>
+        <div className={`room-studio ${hasPriorityMedia ? 'priority-media' : 'default-media'} ${showLiveRail ? 'show-rail studio-has-rail' : 'hide-rail'} ${chatOpen ? 'studio-has-chat' : 'studio-no-chat'} ${watchPartyActive ? 'watch-active' : 'watch-idle'} ${anyScreenSharing ? 'screen-active' : ''}`}>
           {showLiveRail ? (
             <aside className="studio-left-column">
               {liveRailPanel}
@@ -749,50 +751,49 @@ function RoomPage({ onToggleTheme, theme }) {
                 {panel}
               </div>
             ))}
+            {showWatchPanel && !watchPartyActive ? watchPanel : null}
           </section>
 
-          <aside className="studio-right-column">
-            <div className="card sidebar-hub elevated-card">
-              <RoomConsole
-                cameraAvailable={cameraAvailable}
-                cameraEnabled={cameraEnabled}
-                embedded
-                mediaConnected={Boolean(selfPeerId && localStream)}
-                muted={muted}
-                onLeave={handleLeave}
-                onOpenSettings={() => {
-                  void handleRefreshDevices();
-                  setSettingsOpen(true);
-                }}
-                onToggleCamera={() => {
-                  void handleToggleCamera();
-                }}
-                onToggleMute={() => {
-                  void handleToggleMute();
-                }}
-                onToggleScreenShare={() => {
-                  void handleToggleScreenShare();
-                }}
-                onToggleWatchParty={handleToggleWatchParty}
-                roomMediaMode={roomMediaMode}
-                screenShareSupported={screenShareSupported}
-                screenSharing={screenSharing}
-                voiceStatus={voiceStatus}
-                watchPartyOpen={showWatchPanel}
-              />
-              <ParticipantsPanel
-                embedded
-                participants={visibleParticipants}
-                roomMediaMode={roomMediaMode}
-                selfParticipantId={participantIdRef.current}
-              />
-            </div>
-
-            <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
-              <ChatPanel compact disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
-            </ChatProvider>
-          </aside>
+          {chatOpen ? (
+            <aside className="studio-right-column">
+              <ChatProvider key={roomId} participant={selfParticipant} roomId={roomId}>
+                <ChatPanel disabled={Boolean(error)} selfParticipantId={participantIdRef.current} />
+              </ChatProvider>
+            </aside>
+          ) : null}
         </div>
+
+        <section className="room-bottom-toolbar">
+          <RoomConsole
+            cameraAvailable={cameraAvailable}
+            cameraEnabled={cameraEnabled}
+            chatOpen={chatOpen}
+            embedded={false}
+            mediaConnected={Boolean(selfPeerId && localStream)}
+            muted={muted}
+            onLeave={handleLeave}
+            onOpenSettings={() => {
+              void handleRefreshDevices();
+              setSettingsOpen(true);
+            }}
+            onToggleCamera={() => {
+              void handleToggleCamera();
+            }}
+            onToggleChat={() => setChatOpen(!chatOpen)}
+            onToggleMute={() => {
+              void handleToggleMute();
+            }}
+            onToggleScreenShare={() => {
+              void handleToggleScreenShare();
+            }}
+            onToggleWatchParty={handleToggleWatchParty}
+            roomMediaMode={roomMediaMode}
+            screenShareSupported={screenShareSupported}
+            screenSharing={screenSharing}
+            voiceStatus={voiceStatus}
+            watchPartyOpen={showWatchPanel}
+          />
+        </section>
       </main>
 
       <MediaSettingsModal
