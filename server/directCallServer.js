@@ -577,6 +577,7 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
     }, 8_000);
 
     ws.on('message', (rawMessage) => {
+      console.log(`[direct-call] message received ${socketId} bytes=${rawMessage.length}`);
       const message = safeJsonParse(rawMessage.toString('utf8'));
 
       if (!message || typeof message !== 'object') {

@@ -22,10 +22,16 @@ export class DirectCallSocket {
 
     ws.addEventListener('open', () => {
       this.callbacks.onConnectionStateChange?.('authenticating');
-      this.send('auth', {
-        appState: document.visibilityState === 'hidden' ? 'background' : 'foreground',
-        token: this.token,
-      });
+      try {
+        console.log('[direct-call] websocket open, sending auth');
+        this.send('auth', {
+          appState: document.visibilityState === 'hidden' ? 'background' : 'foreground',
+          token: this.token,
+        });
+      } catch (error) {
+        console.error('[direct-call] auth send failed', error);
+        this.callbacks.onError?.(error);
+      }
     });
 
     ws.addEventListener('message', (event) => {
@@ -43,6 +49,11 @@ export class DirectCallSocket {
     });
 
     ws.addEventListener('close', (event) => {
+      console.warn('[direct-call] websocket closed', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
       this.ws = null;
       this.callbacks.onClose?.(event);
 
@@ -58,6 +69,7 @@ export class DirectCallSocket {
     });
 
     ws.addEventListener('error', (event) => {
+      console.error('[direct-call] websocket error', event);
       this.callbacks.onError?.(event);
     });
   }
