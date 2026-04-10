@@ -18,13 +18,12 @@ import {
 } from '../lib/directCallAuth.js';
 import { enableIncomingCallPush } from '../lib/pushNotifications.js';
 import {
-  fetchDirectCallSession,
   fetchTurnCredentials,
   registerPushToken,
   requestDevToken,
   unregisterPushToken,
 } from '../services/directCallApi.js';
-import { DirectCallSocket } from '../services/DirectCallSocket.js';
+import { DirectCallSignal } from '../services/DirectCallSignal.js';
 import { DirectCallWebRtc } from '../services/DirectCallWebRtc.js';
 
 const EMPTY_LOCAL_STATE = {
@@ -114,15 +113,23 @@ function DirectCallPage({ onToggleTheme, theme }) {
     supported: typeof window !== 'undefined' && 'Notification' in window,
   });
 
-  const socketRef = useRef(null);
+  const signalRef = useRef(null);
   const webrtcRef = useRef(null);
   const activeCallRef = useRef(null);
   const authSessionRef = useRef(null);
+  const connectionStateRef = useRef('offline');
 
   activeCallRef.current = activeCall;
   authSessionRef.current = authSession;
+  connectionStateRef.current = connectionState;
 
   function resetCallState(message = 'Ready to call by user ID.') {
+    const previousCallId = activeCallRef.current?.callId;
+
+    if (previousCallId) {
+      signalRef.current?.releaseCall(previousCallId);
+    }
+
     webrtcRef.current?.teardownCall();
     setActiveCall(null);
     setIncomingCall(null);
@@ -159,14 +166,12 @@ function DirectCallPage({ onToggleTheme, theme }) {
           return;
         }
 
-        try {
-          socketRef.current?.send('webrtc-ice-candidate', {
-            callId: currentCall.callId,
-            candidate,
-          });
-        } catch {
+        void signalRef.current?.sendIceCandidate({
+          callId: currentCall.callId,
+          candidate,
+        }).catch(() => {
           // Ignore ICE updates during reconnects or teardown.
-        }
+        });
       },
       onLocalStateChange: setLocalState,
       onLocalStream: setLocalStream,
@@ -191,12 +196,8 @@ function DirectCallPage({ onToggleTheme, theme }) {
     return fetchTurnCredentials(currentSession.token);
   });
 
-  const handleSocketEvent = useEffectEvent(async (event) => {
+  const handleSignalEvent = useEffectEvent(async (event) => {
     switch (event.type) {
-      case 'auth-success':
-        setAuthError('');
-        setStatusMessage('Socket authenticated and ready.');
-        return;
       case 'call-request':
         setCallError('');
         setActiveCall({
@@ -210,7 +211,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
         return;
       case 'incoming-call':
         if (activeCallRef.current?.callId && activeCallRef.current.callId !== event.callId) {
-          socketRef.current?.send('reject-call', {
+          void signalRef.current?.rejectCall({
             callId: event.callId,
             reason: 'busy',
           });
@@ -243,7 +244,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
           mediaMode: event.mediaMode,
         });
 
-        socketRef.current?.send('webrtc-offer', {
+        await signalRef.current?.sendOffer({
           callId: event.callId,
           description: offer,
         });
@@ -262,7 +263,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
           mediaMode: event.mediaMode,
         });
 
-        socketRef.current?.send('webrtc-answer', {
+        await signalRef.current?.sendAnswer({
           callId: event.callId,
           description: answer,
         });
@@ -299,96 +300,86 @@ function DirectCallPage({ onToggleTheme, theme }) {
 
   useEffect(() => {
     if (!authSession?.token) {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
+      signalRef.current?.disconnect();
+      signalRef.current = null;
       setConnectionState('offline');
-      setSessionInfo(null);
+      setSessionInfo({
+        pendingCalls: [],
+        user: null,
+      });
       return undefined;
     }
 
     let active = true;
-    const socket = new DirectCallSocket({
-      callbacks: {
-        onClose: (event) => {
-          if (!active) {
-            return;
-          }
+    let signal = null;
 
-          if (event.code === 4401) {
-            setAuthError(event.reason || 'Authentication failed');
-            setCallError(`Socket closed (${event.code}): ${event.reason || 'Authentication failed'}`);
-            return;
-          }
+    try {
+      signal = new DirectCallSignal({
+        callbacks: {
+          onEvent: (event) => {
+            if (!active) {
+              return;
+            }
 
-          if (event.code && event.code !== 1000) {
-            setCallError(`Socket closed (${event.code}): ${event.reason || 'No close reason provided'}`);
-          }
+            void handleSignalEvent(event);
+          },
+          onConnectionStateChange: (state) => {
+            if (!active) {
+              return;
+            }
+
+            setConnectionState(state);
+
+            if (state === 'online' && !activeCallRef.current?.callId) {
+              setStatusMessage('Firebase signaling is online and ready.');
+            }
+
+            if (state === 'reconnecting') {
+              setStatusMessage('Reconnecting Firebase signaling...');
+            }
+          },
+          onError: (error) => {
+            if (!active) {
+              return;
+            }
+
+            setCallError(error.message || 'Firebase signaling reported an error.');
+          },
+          onSessionUpdate: (session) => {
+            if (!active) {
+              return;
+            }
+
+            setSessionInfo(session);
+
+            if (
+              connectionStateRef.current === 'online'
+              && !activeCallRef.current?.callId
+              && session.pendingCalls.length === 0
+            ) {
+              setStatusMessage('Ready to call by user ID.');
+            }
+          },
         },
-        onConnectionStateChange: (state) => {
-          if (!active) {
-            return;
-          }
-
-          setConnectionState(state);
-        },
-        onError: () => {
-          if (!active) {
-            return;
-          }
-
-          setCallError('Signal socket reported an error. Check Render logs for the matching close reason.');
-        },
-        onEvent: (event) => {
-          if (!active) {
-            return;
-          }
-
-          void handleSocketEvent(event);
-        },
-      },
-      token: authSession.token,
-    });
-
-    socketRef.current = socket;
-    socket.connect();
-
-    void fetchDirectCallSession(authSession.token)
-      .then((session) => {
-        if (!active) {
-          return;
-        }
-
-        setSessionInfo(session);
-
-        if (session.pendingCalls?.length > 0) {
-          const [pendingCall] = session.pendingCalls;
-
-          setIncomingCall(pendingCall);
-          setActiveCall({
-            ...pendingCall,
-            direction: 'incoming',
-          });
-          setCallPhase('incoming');
-          setStatusMessage(`${pendingCall.callerName || pendingCall.callerId} is calling you.`);
-          return;
-        }
-
-        setStatusMessage('Ready to call by user ID.');
-      })
-      .catch((error) => {
-        if (!active) {
-          return;
-        }
-
-        setAuthError(error.message || 'Unable to load session');
+        session: authSession,
       });
+
+      signalRef.current = signal;
+      setCallError('');
+      setAuthError('');
+      signal.connect();
+    } catch (error) {
+      setConnectionState('offline');
+      setCallError(error.message || 'Unable to start Firebase signaling.');
+      return undefined;
+    }
 
     return () => {
       active = false;
 
-      if (socketRef.current === socket) {
-        socket.disconnect();
-        socketRef.current = null;
+      if (signalRef.current === signal) {
+        signal.disconnect();
+        signalRef.current = null;
       }
     };
   }, [authSession]);
@@ -399,7 +390,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
     }
 
     const handleVisibilityChange = () => {
-      socketRef.current?.updateAppState(
+      signalRef.current?.updateAppState(
         document.visibilityState === 'hidden' ? 'background' : 'foreground',
       );
     };
@@ -535,7 +526,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
     }
 
     try {
-      socketRef.current?.send('call-request', {
+      await signalRef.current?.requestCall({
         calleeUserId: calleeUserId.trim(),
         mediaMode,
       });
@@ -556,7 +547,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
       });
       setCallPhase('connecting');
       setStatusMessage('Answering the incoming call...');
-      socketRef.current?.send('accept-call', {
+      await signalRef.current?.acceptCall({
         callId: incomingCall.callId,
       });
       setIncomingCall(null);
@@ -570,7 +561,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
       return;
     }
 
-    socketRef.current?.send('reject-call', {
+    void signalRef.current?.rejectCall({
       callId: incomingCall.callId,
       reason: 'rejected',
     });
@@ -582,7 +573,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
       return;
     }
 
-    socketRef.current?.send('end-call', {
+    void signalRef.current?.endCall({
       callId: activeCall.callId,
       reason: 'ended',
     });
@@ -639,7 +630,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
                 </div>
                 <div className="presence-card">
                   <div className="presence-copy">
-                    <strong>Socket</strong>
+                    <strong>Signal</strong>
                     <span>{connectionState}</span>
                   </div>
                 </div>
@@ -833,7 +824,7 @@ function DirectCallPage({ onToggleTheme, theme }) {
 
           <div className="direct-call-flow-text">
             <strong>Security gates</strong>
-            <p>JWT-authenticated sockets, in-memory rate limiting, disconnect cleanup, and short-lived TURN credentials.</p>
+            <p>JWT identity, Firebase Realtime Database signaling, disconnect cleanup, and optional TURN credentials.</p>
           </div>
 
           <div className="direct-call-flow-text">
