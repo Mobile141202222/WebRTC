@@ -91,6 +91,45 @@ function getSyncedPosition(watchParty) {
   return Math.max(0, basePosition + (Date.now() - syncedAt) / 1000);
 }
 
+function syncPlayerToWatchParty(player, watchParty, { force = false } = {}) {
+  if (!player || !watchParty?.videoId || !window.YT?.PlayerState) {
+    return;
+  }
+
+  const targetPosition = getSyncedPosition(watchParty);
+  const currentTime = player.getCurrentTime?.() || 0;
+  const playerState = player.getPlayerState?.();
+  const currentVideoId = player.getVideoData?.().video_id;
+  const drift = Math.abs(currentTime - targetPosition);
+
+  if (currentVideoId !== watchParty.videoId) {
+    if (watchParty.status === 'playing') {
+      player.loadVideoById({
+        startSeconds: targetPosition,
+        videoId: watchParty.videoId,
+      });
+    } else {
+      player.cueVideoById({
+        startSeconds: targetPosition,
+        videoId: watchParty.videoId,
+      });
+    }
+    return;
+  }
+
+  if (force || drift > 0.9) {
+    player.seekTo(targetPosition, true);
+  }
+
+  if (watchParty.status === 'playing' && playerState !== window.YT.PlayerState.PLAYING) {
+    player.playVideo();
+  }
+
+  if (watchParty.status === 'paused' && playerState !== window.YT.PlayerState.PAUSED) {
+    player.pauseVideo();
+  }
+}
+
 function PanelControls({ isExpanded, onToggleExpand, onToggleFullscreen }) {
   return (
     <div className="panel-zoom-controls">
@@ -186,6 +225,20 @@ function WatchPartyPanel({
           events: {
             onReady: () => {
               setPlayerReady(true);
+              const latestWatchParty = latestWatchPartyRef.current;
+
+              if (!latestWatchParty?.videoId || !playerRef.current) {
+                return;
+              }
+
+              suppressEventsRef.current = true;
+              syncPlayerToWatchParty(playerRef.current, latestWatchParty, {
+                force: true,
+              });
+              window.clearTimeout(releaseSuppressTimerRef.current);
+              releaseSuppressTimerRef.current = window.setTimeout(() => {
+                suppressEventsRef.current = false;
+              }, 400);
             },
             onStateChange: (event) => {
               const latestWatchParty = latestWatchPartyRef.current;
@@ -237,32 +290,11 @@ function WatchPartyPanel({
       suppressEventsRef.current = true;
 
       if (currentVideoId !== watchParty.videoId) {
-        if (watchParty.status === 'playing') {
-          playerRef.current.loadVideoById({
-            startSeconds,
-            videoId: watchParty.videoId,
-          });
-        } else {
-          playerRef.current.cueVideoById({
-            startSeconds,
-            videoId: watchParty.videoId,
-          });
-        }
+        syncPlayerToWatchParty(playerRef.current, watchParty, { force: true });
       } else {
-        const currentTime = playerRef.current.getCurrentTime?.() || 0;
-        if (Math.abs(currentTime - startSeconds) > 1.3) {
-          playerRef.current.seekTo(startSeconds, true);
-        }
-
-        const playerState = playerRef.current.getPlayerState?.();
-
-        if (watchParty.status === 'playing' && playerState !== window.YT.PlayerState.PLAYING) {
-          playerRef.current.playVideo();
-        }
-
-        if (watchParty.status === 'paused' && playerState !== window.YT.PlayerState.PAUSED) {
-          playerRef.current.pauseVideo();
-        }
+        syncPlayerToWatchParty(playerRef.current, watchParty, {
+          force: Math.abs((playerRef.current.getCurrentTime?.() || 0) - startSeconds) > 0.9,
+        });
       }
 
       window.clearTimeout(releaseSuppressTimerRef.current);
@@ -281,6 +313,44 @@ function WatchPartyPanel({
   useEffect(() => () => {
     window.clearTimeout(releaseSuppressTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!playerReady || !watchParty?.videoId || watchParty.status !== 'playing') {
+      return undefined;
+    }
+
+    const driftInterval = window.setInterval(() => {
+      if (!playerRef.current) {
+        return;
+      }
+
+      const latestWatchParty = latestWatchPartyRef.current;
+
+      if (!latestWatchParty?.videoId || latestWatchParty.status !== 'playing') {
+        return;
+      }
+
+      const expectedPosition = getSyncedPosition(latestWatchParty);
+      const actualPosition = playerRef.current.getCurrentTime?.() || 0;
+
+      if (Math.abs(actualPosition - expectedPosition) <= 0.85) {
+        return;
+      }
+
+      suppressEventsRef.current = true;
+      syncPlayerToWatchParty(playerRef.current, latestWatchParty, {
+        force: true,
+      });
+      window.clearTimeout(releaseSuppressTimerRef.current);
+      releaseSuppressTimerRef.current = window.setTimeout(() => {
+        suppressEventsRef.current = false;
+      }, 300);
+    }, 1500);
+
+    return () => {
+      window.clearInterval(driftInterval);
+    };
+  }, [playerReady, watchParty?.status, watchParty?.videoId]);
 
   function handleSubmit(event) {
     event.preventDefault();
