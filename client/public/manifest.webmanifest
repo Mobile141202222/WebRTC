@@ -1,0 +1,17 @@
+{
+  "name": "RoomKit Direct Calling",
+  "short_name": "RoomKit",
+  "start_url": "/direct-call",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e3a8a",
+  "description": "Direct 1-to-1 browser calling with WebRTC and push notifications.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

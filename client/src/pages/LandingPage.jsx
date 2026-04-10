@@ -171,6 +171,29 @@ function LandingPage({ onToggleTheme, theme }) {
             </button>
           </form>
         </article>
+
+        <article className="card join-card elevated-card">
+          <div className="panel-head">
+            <div className="heading-group">
+              <span className="eyebrow">Direct</span>
+              <h3>1-to-1 calling</h3>
+            </div>
+            <span className="count-badge">PWA</span>
+          </div>
+
+          <p className="micro-copy">
+            JWT-authenticated direct calling by user ID with push wake-up hooks for installed devices.
+          </p>
+
+          <button
+            className="secondary-button strong-secondary wide-button action-button"
+            onClick={() => navigate('/direct-call')}
+            type="button"
+          >
+            <ArrowRightIcon />
+            <span>Open direct call</span>
+          </button>
+        </article>
       </section>
 
       {error ? <p className="feedback error">{error}</p> : null}

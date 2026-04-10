@@ -4,16 +4,21 @@ const { randomUUID } = require('node:crypto');
 const express = require('express');
 const cors = require('cors');
 const { ExpressPeerServer } = require('peer');
+const { config } = require('./server/config');
+const { createDirectCallServer } = require('./server/directCallServer');
 
 const app = express();
-const serverPort = Number(process.env.PORT || 3001);
-const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
-const peerPath = process.env.PEER_PATH || '/peerjs';
-const buildDirectory = path.join(__dirname, 'client', 'dist');
 
 app.use(
   cors({
-    origin: clientOrigin,
+    origin(origin, callback) {
+      if (!origin || config.allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Origin is not allowed by CORS'));
+    },
     credentials: true,
   }),
 );
@@ -21,14 +26,15 @@ app.use(express.json());
 
 app.get('/api/health', (_request, response) => {
   response.json({
+    directCallWsPath: config.directCallWsPath,
     ok: true,
-    peerPath,
+    peerPath: config.peerPath,
     timestamp: new Date().toISOString(),
   });
 });
 
-const httpServer = app.listen(serverPort, () => {
-  console.log(`Ephemeral chat server listening on http://localhost:${serverPort}`);
+const httpServer = app.listen(config.serverPort, () => {
+  console.log(`Ephemeral chat server listening on http://localhost:${config.serverPort}`);
 });
 
 const peerServer = ExpressPeerServer(httpServer, {
@@ -44,12 +50,22 @@ peerServer.on('disconnect', (client) => {
   console.log(`Peer disconnected: ${client.getId()}`);
 });
 
-app.use(peerPath, peerServer);
+app.use(config.peerPath, peerServer);
 
-if (fs.existsSync(buildDirectory)) {
-  app.use(express.static(buildDirectory));
+createDirectCallServer({
+  app,
+  authConfig: config.auth,
+  callConfig: config.calls,
+  httpServer,
+  pushConfig: config.push,
+  turnConfig: config.turn,
+  wsPath: config.directCallWsPath,
+});
+
+if (fs.existsSync(config.buildDirectory)) {
+  app.use(express.static(config.buildDirectory));
 
   app.use((_request, response) => {
-    response.sendFile(path.join(buildDirectory, 'index.html'));
+    response.sendFile(path.join(config.buildDirectory, 'index.html'));
   });
 }

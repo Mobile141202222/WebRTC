@@ -282,3 +282,22 @@ export function ImageIcon(props) {
     </IconBase>
   );
 }
+
+export function PhoneCallIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M6.8 3.5h3.1l1.2 4-1.8 1.8a15 15 0 0 0 5.3 5.3l1.8-1.8 4 1.2v3.1a1.8 1.8 0 0 1-1.8 1.8A16.6 16.6 0 0 1 5 5.3 1.8 1.8 0 0 1 6.8 3.5Z" />
+      <path d="M15 4.5a5 5 0 0 1 4.5 4.5" />
+      <path d="M15 1.8A7.7 7.7 0 0 1 22.2 9" />
+    </IconBase>
+  );
+}
+
+export function PhoneOffIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M6.8 3.5h3.1l1.2 4-1.8 1.8a15 15 0 0 0 5.3 5.3l1.8-1.8 4 1.2v3.1a1.8 1.8 0 0 1-1.8 1.8A16.6 16.6 0 0 1 5 5.3 1.8 1.8 0 0 1 6.8 3.5Z" />
+      <path d="m4 4 16 16" />
+    </IconBase>
+  );
+}
