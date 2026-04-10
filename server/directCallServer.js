@@ -42,6 +42,33 @@ function buildSocketEvent(type, payload = {}) {
   };
 }
 
+function authenticateSocket({
+  appState,
+  authConfig,
+  socketContext,
+  store,
+  token,
+  ws,
+}) {
+  const authContext = verifyJwt(String(token || ''), authConfig);
+  const nextSocketContext = {
+    displayName: authContext.displayName,
+    socketId: socketContext.socketId,
+    userId: authContext.userId,
+    ws,
+  };
+
+  store.registerConnection({
+    appState: appState === 'background' ? 'background' : 'foreground',
+    displayName: authContext.displayName,
+    socketId: socketContext.socketId,
+    userId: authContext.userId,
+    ws,
+  });
+
+  return nextSocketContext;
+}
+
 function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushConfig, turnConfig, wsPath }) {
   const store = new DirectCallStore();
   const rateLimiter = new SlidingWindowRateLimiter();
@@ -561,20 +588,50 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
     console.log(`[direct-call] upgrade request for ${requestUrl.pathname} from ${request.headers.origin || 'unknown-origin'}`);
 
     wsServer.handleUpgrade(request, socket, head, (ws) => {
-      wsServer.emit('connection', ws);
+      wsServer.emit('connection', ws, request);
     });
   });
 
-  wsServer.on('connection', (ws) => {
+  wsServer.on('connection', (ws, request) => {
     const socketId = randomUUID();
     let socketContext = null;
     console.log(`[direct-call] socket connected ${socketId}`);
+    const requestUrl = new URL(request?.url || wsPath, 'http://localhost');
+    const initialToken = requestUrl.searchParams.get('token') || '';
+    const initialAppState = requestUrl.searchParams.get('appState') || 'foreground';
     const authTimeoutId = setTimeout(() => {
       if (!socketContext) {
         console.warn(`[direct-call] auth timeout ${socketId}`);
         ws.close(4401, 'Authentication timeout');
       }
     }, 8_000);
+
+    if (initialToken) {
+      try {
+        socketContext = authenticateSocket({
+          appState: initialAppState,
+          authConfig,
+          socketContext: { socketId },
+          store,
+          token: initialToken,
+          ws,
+        });
+        clearTimeout(authTimeoutId);
+        console.log(`[direct-call] auth success ${socketId} user=${socketContext.userId} via=query`);
+
+        sendJson(ws, buildSocketEvent('auth-success', {
+          socketId,
+          user: {
+            displayName: socketContext.displayName,
+            userId: socketContext.userId,
+          },
+        }));
+        deliverPendingCalls(socketContext);
+      } catch (error) {
+        console.warn(`[direct-call] auth failed ${socketId}: ${error.message || 'Authentication failed'}`);
+        ws.close(4401, error.message || 'Authentication failed');
+      }
+    }
 
     ws.on('message', (rawMessage) => {
       console.log(`[direct-call] message received ${socketId} bytes=${rawMessage.length}`);
@@ -597,30 +654,22 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
 
         try {
           // The socket is inert until a signed JWT binds it to a concrete user ID.
-          const authContext = verifyJwt(String(message.token || ''), authConfig);
-
-          socketContext = {
-            displayName: authContext.displayName,
-            socketId,
-            userId: authContext.userId,
-            ws,
-          };
-
-          store.registerConnection({
-            appState: message.appState === 'background' ? 'background' : 'foreground',
-            displayName: authContext.displayName,
-            socketId,
-            userId: authContext.userId,
+          socketContext = authenticateSocket({
+            appState: message.appState,
+            authConfig,
+            socketContext: { socketId },
+            store,
+            token: message.token,
             ws,
           });
           clearTimeout(authTimeoutId);
-          console.log(`[direct-call] auth success ${socketId} user=${authContext.userId}`);
+          console.log(`[direct-call] auth success ${socketId} user=${socketContext.userId} via=message`);
 
           sendJson(ws, buildSocketEvent('auth-success', {
             socketId,
             user: {
-              displayName: authContext.displayName,
-              userId: authContext.userId,
+              displayName: socketContext.displayName,
+              userId: socketContext.userId,
             },
           }));
           deliverPendingCalls(socketContext);

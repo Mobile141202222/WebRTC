@@ -17,21 +17,15 @@ export class DirectCallSocket {
     this.explicitlyClosed = false;
     this.callbacks.onConnectionStateChange?.('connecting');
 
-    const ws = new WebSocket(resolveDirectCallWebSocketUrl());
+    const ws = new WebSocket(resolveDirectCallWebSocketUrl({
+      appState: document.visibilityState === 'hidden' ? 'background' : 'foreground',
+      token: this.token,
+    }));
     this.ws = ws;
 
     ws.addEventListener('open', () => {
       this.callbacks.onConnectionStateChange?.('authenticating');
-      try {
-        console.log('[direct-call] websocket open, sending auth');
-        this.send('auth', {
-          appState: document.visibilityState === 'hidden' ? 'background' : 'foreground',
-          token: this.token,
-        });
-      } catch (error) {
-        console.error('[direct-call] auth send failed', error);
-        this.callbacks.onError?.(error);
-      }
+      console.log('[direct-call] websocket open');
     });
 
     ws.addEventListener('message', (event) => {

@@ -95,11 +95,20 @@ export function resolveDirectCallApiOrigin() {
   return `${protocol}//${host}${isDefaultPort ? '' : `:${port}`}`;
 }
 
-export function resolveDirectCallWebSocketUrl() {
+export function resolveDirectCallWebSocketUrl({ appState, token } = {}) {
   const apiOrigin = resolveDirectCallApiOrigin();
   const wsPath = import.meta.env.VITE_DIRECT_CALL_WS_PATH || '/ws/direct-call';
   const nextUrl = new URL(wsPath, apiOrigin);
 
   nextUrl.protocol = nextUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+
+  if (token) {
+    nextUrl.searchParams.set('token', token);
+  }
+
+  if (appState) {
+    nextUrl.searchParams.set('appState', appState);
+  }
+
   return nextUrl.toString();
 }
