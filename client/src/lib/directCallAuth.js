@@ -1,4 +1,5 @@
 const AUTH_STORAGE_KEY = 'roomkit-direct-call-auth';
+const PROFILE_STORAGE_KEY = 'roomkit-direct-call-profile';
 
 function normalizeOrigin(origin) {
   return String(origin || '').replace(/\/+$/g, '');
@@ -62,6 +63,29 @@ export function persistAuthSession(session) {
 
 export function clearStoredAuthSession() {
   localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+export function loadStoredDirectCallProfile() {
+  const storedValue = localStorage.getItem(PROFILE_STORAGE_KEY);
+
+  if (!storedValue) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedValue);
+  } catch {
+    localStorage.removeItem(PROFILE_STORAGE_KEY);
+    return null;
+  }
+}
+
+export function persistDirectCallProfile(profile) {
+  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+}
+
+export function clearStoredDirectCallProfile() {
+  localStorage.removeItem(PROFILE_STORAGE_KEY);
 }
 
 export function isDevAuthEnabled() {

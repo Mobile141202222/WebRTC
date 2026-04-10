@@ -301,3 +301,11 @@ export function PhoneOffIcon(props) {
     </IconBase>
   );
 }
+
+export function StarIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="m12 3.8 2.5 5 5.5.8-4 3.9.9 5.5L12 16.4 7.1 19l.9-5.5-4-3.9 5.5-.8z" />
+    </IconBase>
+  );
+}

@@ -552,6 +552,82 @@ function createDirectCallServer({ app, authConfig, callConfig, httpServer, pushC
     });
   });
 
+  app.post('/api/direct-call/push/notify', requireAuth, async (request, response) => {
+    const calleeUserId = String(request.body?.calleeUserId || '').trim();
+
+    if (!calleeUserId) {
+      response.status(400).json({
+        error: 'calleeUserId is required',
+      });
+      return;
+    }
+
+    if (calleeUserId === request.auth.userId) {
+      response.status(400).json({
+        error: 'You cannot notify yourself',
+      });
+      return;
+    }
+
+    if (!isFcmConfigured(pushConfig)) {
+      response.json({
+        delivered: 0,
+        ok: true,
+        reason: 'push_not_configured',
+      });
+      return;
+    }
+
+    const pushTokens = store.getPushTokensForUser(calleeUserId);
+
+    if (pushTokens.length === 0) {
+      response.json({
+        delivered: 0,
+        ok: true,
+        reason: 'no_registered_push_tokens',
+      });
+      return;
+    }
+
+    const call = {
+      calleeUserId,
+      callerId: request.auth.userId,
+      callerName: String(request.body?.callerName || request.auth.displayName).trim() || request.auth.displayName,
+      id: String(request.body?.callId || randomUUID()).trim(),
+      mediaMode: sanitizeMediaMode(request.body?.mediaMode),
+    };
+
+    const pushResults = await Promise.allSettled(
+      pushTokens.map((token) =>
+        sendPushNotification({
+          appBaseUrl: callConfig.appBaseUrl,
+          call,
+          pushConfig,
+          token,
+        })),
+    );
+    let delivered = 0;
+
+    for (let index = 0; index < pushResults.length; index += 1) {
+      const result = pushResults[index];
+
+      if (result.status === 'fulfilled' && result.value.ok) {
+        delivered += 1;
+        continue;
+      }
+
+      if (result.status === 'fulfilled' && result.value.invalidToken) {
+        store.removePushTokenEverywhere(pushTokens[index]);
+      }
+    }
+
+    response.json({
+      delivered,
+      ok: true,
+      tokens: pushTokens.length,
+    });
+  });
+
   const expirationSweepId = setInterval(() => {
     const expiredCalls = store.expireCalls();
 

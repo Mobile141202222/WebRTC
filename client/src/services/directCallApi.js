@@ -60,3 +60,22 @@ export function unregisterPushToken({ pushToken, token }) {
     token,
   });
 }
+
+export function notifyIncomingCall({
+  callId,
+  calleeUserId,
+  callerName,
+  mediaMode,
+  token,
+}) {
+  return requestJson('/api/direct-call/push/notify', {
+    body: {
+      callId,
+      calleeUserId,
+      callerName,
+      mediaMode,
+    },
+    method: 'POST',
+    token,
+  });
+}

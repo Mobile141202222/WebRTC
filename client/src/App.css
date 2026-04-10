@@ -2903,9 +2903,16 @@ body {
 .direct-call-auth-card,
 .direct-call-stage-card,
 .direct-call-side-card,
+.direct-call-cluster,
 .direct-call-dev-auth,
 .direct-call-dialer,
-.direct-call-flow-text {
+.direct-call-flow-text,
+.direct-call-profile-form,
+.direct-call-person-list,
+.direct-call-person-grid,
+.direct-call-person-card,
+.direct-call-person-actions,
+.direct-call-person-secondary {
   display: grid;
   gap: 14px;
 }
@@ -2927,6 +2934,21 @@ body {
 
 .direct-call-status-strip {
   grid-template-columns: 1fr;
+}
+
+.direct-call-profile-form {
+  gap: 10px;
+}
+
+.direct-call-advanced-auth {
+  display: grid;
+  gap: 12px;
+}
+
+.direct-call-advanced-auth summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-weight: 700;
 }
 
 .direct-call-media-grid {
@@ -2971,6 +2993,105 @@ body {
   border-color: rgba(29, 78, 216, 0.2);
 }
 
+.direct-call-cluster {
+  padding: 16px;
+  background: var(--panel-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+}
+
+.direct-call-person-list,
+.direct-call-person-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.direct-call-person-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.direct-call-person-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.direct-call-person-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.direct-call-person-head strong,
+.direct-call-person-head span {
+  display: block;
+}
+
+.direct-call-person-head span,
+.direct-call-person-meta {
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.direct-call-person-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.direct-call-person-actions,
+.direct-call-person-secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.direct-call-person-secondary {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+
+.icon-text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.direct-call-capability {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.direct-call-capability.is-online {
+  color: #14532d;
+  background: rgba(74, 222, 128, 0.22);
+}
+
+.direct-call-capability.is-background {
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.2);
+}
+
+.direct-call-capability.is-push-ready {
+  color: #1d4ed8;
+  background: rgba(96, 165, 250, 0.18);
+}
+
+.direct-call-capability.is-offline {
+  color: var(--text-soft);
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.ghost-danger {
+  background: rgba(127, 29, 29, 0.12);
+}
+
 @media (max-width: 1180px) {
   .direct-call-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2984,6 +3105,11 @@ body {
 
 @media (max-width: 760px) {
   .direct-call-media-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .direct-call-person-actions,
+  .direct-call-person-secondary {
     grid-template-columns: minmax(0, 1fr);
   }
 

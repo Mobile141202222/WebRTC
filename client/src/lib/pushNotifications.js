@@ -11,7 +11,10 @@ export async function registerApplicationServiceWorker() {
   return navigator.serviceWorker.register('/firebase-messaging-sw.js');
 }
 
-export async function enableIncomingCallPush({ onForegroundMessage } = {}) {
+export async function enableIncomingCallPush({
+  onForegroundMessage,
+  requestPermission = true,
+} = {}) {
   if (!firebaseApp) {
     return {
       enabled: false,
@@ -50,7 +53,9 @@ export async function enableIncomingCallPush({ onForegroundMessage } = {}) {
 
   const permission = Notification.permission === 'granted'
     ? 'granted'
-    : await Notification.requestPermission();
+    : requestPermission
+      ? await Notification.requestPermission()
+      : Notification.permission;
 
   if (permission !== 'granted') {
     return {
@@ -91,4 +96,36 @@ export async function enableIncomingCallPush({ onForegroundMessage } = {}) {
     pushToken,
     supported: true,
   };
+}
+
+export async function showIncomingCallNotification({ callId, callerName, mediaMode }) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return false;
+  }
+
+  const registration = await registerApplicationServiceWorker().catch(() => null);
+  const title = `Incoming ${mediaMode === 'video' ? 'video' : 'audio'} call`;
+  const body = `${callerName || 'Someone'} is calling you`;
+  const data = {
+    callId,
+    type: 'incoming-call',
+    url: `/direct-call?callId=${encodeURIComponent(callId)}`,
+  };
+
+  if (registration?.showNotification) {
+    await registration.showNotification(title, {
+      body,
+      data,
+      icon: '/favicon.svg',
+      renotify: true,
+      requireInteraction: true,
+      tag: `call-${callId}`,
+    });
+    return true;
+  }
+
+  new Notification(title, {
+    body,
+  });
+  return true;
 }
