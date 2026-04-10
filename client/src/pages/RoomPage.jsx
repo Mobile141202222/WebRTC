@@ -631,6 +631,7 @@ function RoomPage({ onToggleTheme, theme }) {
       <AudioStreamRack
         isExpanded={focusedPanel === 'rail'}
         layoutMode="rail"
+        localDisplayName={displayName}
         localPreviewStream={localPreviewStream}
         localScreenSharing={screenSharing}
         localStream={localStream}
@@ -651,6 +652,7 @@ function RoomPage({ onToggleTheme, theme }) {
     <div className={`panel-shell stage-shell ${focusedPanel === 'stage' ? 'is-focused' : ''}`} ref={stagePanelRef}>
       <AudioStreamRack
         isExpanded={focusedPanel === 'stage'}
+        localDisplayName={displayName}
         localScreenSharing={screenSharing}
         localStream={localStream}
         localPreviewStream={localPreviewStream}
@@ -672,6 +674,7 @@ function RoomPage({ onToggleTheme, theme }) {
       <AudioStreamRack
         isExpanded={focusedPanel === 'screen'}
         layoutMode="screen"
+        localDisplayName={displayName}
         localScreenSharing={screenSharing}
         localStream={localStream}
         localPreviewStream={localPreviewStream}

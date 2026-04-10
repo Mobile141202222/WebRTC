@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CollapseWideIcon, ExpandWideIcon, FullscreenIcon, MicOffIcon } from './Icons.jsx';
+import { FullscreenIcon, MicOffIcon } from './Icons.jsx';
 
 function getInitials(label = '') {
   const [first = '?', second = ''] = label.trim().split(/\s+/);
@@ -130,18 +130,9 @@ function AudioLevelMeter({ level }) {
   );
 }
 
-function PanelControls({ isExpanded, onToggleExpand, onToggleFullscreen }) {
+function PanelControls({ onToggleFullscreen }) {
   return (
     <div className="panel-zoom-controls">
-      <button
-        aria-label={isExpanded ? 'Reduce panel size' : 'Expand panel'}
-        className="secondary-button icon-button control-icon"
-        onClick={onToggleExpand}
-        title={isExpanded ? 'Reduce' : 'Expand'}
-        type="button"
-      >
-        {isExpanded ? <CollapseWideIcon /> : <ExpandWideIcon />}
-      </button>
       <button
         aria-label="Fullscreen"
         className="secondary-button icon-button control-icon"
@@ -216,7 +207,6 @@ function MediaTile({ compact = false, entry, featured = false }) {
       <div className={featured ? 'featured-share-footer' : 'media-caption media-caption-extended'}>
         <div>
           <strong>{entry.label}</strong>
-          <span>{entry.screenSharing ? 'Screen share' : entry.role}</span>
         </div>
         <div className="media-side-meta">
           <AudioLevelMeter level={level} />
@@ -225,7 +215,6 @@ function MediaTile({ compact = false, entry, featured = false }) {
               <MicOffIcon style={{ width: '12px', height: '12px' }} />
             </div>
           ) : null}
-          <span className="media-badge">{entry.screenSharing ? 'Screen live' : hasVideoTrack ? 'Video' : 'Audio'}</span>
         </div>
       </div>
     </article>
@@ -282,14 +271,14 @@ function createSplitEntries({ id, label, muted, role, screenSharing, stream, pre
   ];
 }
 
-function buildEntries({ localPreviewStream, localScreenSharing, localStream, localAudioEnabled, localVideoEnabled, participants, remoteStreams }) {
+function buildEntries({ localDisplayName, localPreviewStream, localScreenSharing, localStream, localAudioEnabled, localVideoEnabled, participants, remoteStreams }) {
   const entries = [];
 
   if (localStream) {
     entries.push(
       ...createSplitEntries({
         id: 'local',
-        label: 'You',
+        label: localDisplayName || 'You',
         muted: true,
         previewStream: localPreviewStream,
         role: localScreenSharing ? 'Screen share' : 'Local',
@@ -334,20 +323,20 @@ function EmptyStage({ mediaMode, title }) {
 }
 
 function AudioStreamRack({
-  isExpanded = false,
   layoutMode = 'default',
+  localDisplayName = 'You',
   localPreviewStream = null,
   localScreenSharing = false,
   localStream,
   localAudioEnabled,
   localVideoEnabled,
   mediaMode,
-  onToggleExpand,
   onToggleFullscreen,
   participants,
   remoteStreams,
 }) {
   const entries = buildEntries({
+    localDisplayName,
     localPreviewStream,
     localScreenSharing,
     localStream,
@@ -372,8 +361,6 @@ function AudioStreamRack({
           <div className="panel-head-actions">
             <span className="count-badge">{railEntries.length}</span>
             <PanelControls
-              isExpanded={isExpanded}
-              onToggleExpand={onToggleExpand}
               onToggleFullscreen={onToggleFullscreen}
             />
           </div>
@@ -403,8 +390,6 @@ function AudioStreamRack({
           <div className="panel-head-actions">
             <span className="count-badge">{featuredEntry ? 1 : 0}</span>
             <PanelControls
-              isExpanded={isExpanded}
-              onToggleExpand={onToggleExpand}
               onToggleFullscreen={onToggleFullscreen}
             />
           </div>
@@ -430,8 +415,6 @@ function AudioStreamRack({
           <div className="panel-head-actions">
             <span className="count-badge">{mediaMode === 'video' ? 'Video' : 'Voice'}</span>
             <PanelControls
-              isExpanded={isExpanded}
-              onToggleExpand={onToggleExpand}
               onToggleFullscreen={onToggleFullscreen}
             />
           </div>
@@ -451,8 +434,6 @@ function AudioStreamRack({
         <div className="panel-head-actions">
           <span className="count-badge">{liveCount}</span>
           <PanelControls
-            isExpanded={isExpanded}
-            onToggleExpand={onToggleExpand}
             onToggleFullscreen={onToggleFullscreen}
           />
         </div>
