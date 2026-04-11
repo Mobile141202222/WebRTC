@@ -74,6 +74,7 @@ export class VoiceEngine {
   constructor(callbacks = {}) {
     this.callbacks = callbacks;
     this.calls = new Map();
+    this.dataConnections = new Map();
     this.remoteMediaStreams = new Map();
     this.localParticipantId = '';
     this.localStream = null;
@@ -110,6 +111,11 @@ export class VoiceEngine {
 
     peer.on('call', (incomingCall) => {
       void this.answerIncomingCall(incomingCall);
+    });
+
+    peer.on('connection', (incomingConnection) => {
+      const remoteParticipantId = incomingConnection.metadata?.participantId || incomingConnection.peer;
+      this.attachDataConnection(remoteParticipantId, incomingConnection);
     });
 
     peer.on('disconnected', () => {
@@ -435,7 +441,12 @@ export class VoiceEngine {
       record.call.close();
     }
 
+    for (const record of this.dataConnections.values()) {
+      record.connection.close();
+    }
+
     this.calls.clear();
+    this.dataConnections.clear();
     this.remoteMediaStreams.clear();
   }
 
@@ -459,7 +470,7 @@ export class VoiceEngine {
   }
 
   async syncParticipants(participants, selfParticipantId) {
-    if (!this.peer || !this.peerId || this.mediaUnavailable) {
+    if (!this.peer || !this.peerId) {
       return;
     }
 
@@ -471,6 +482,35 @@ export class VoiceEngine {
       }
 
       activeParticipants.add(participant.id);
+      const existingDataConnection = this.dataConnections.get(participant.id);
+
+      if (existingDataConnection && existingDataConnection.peerId !== participant.peerId) {
+        existingDataConnection.connection.close();
+        this.dataConnections.delete(participant.id);
+      }
+
+      if (!this.dataConnections.has(participant.id) && shouldInitiateCall(selfParticipantId, participant.id)) {
+        try {
+          const outgoingConnection = this.peer.connect(participant.peerId, {
+            metadata: {
+              channel: 'watch-party',
+              participantId: selfParticipantId,
+            },
+            reliable: true,
+          });
+
+          if (outgoingConnection) {
+            this.attachDataConnection(participant.id, outgoingConnection, participant.peerId);
+          }
+        } catch (error) {
+          this.callbacks.onError?.(error);
+        }
+      }
+
+      if (this.mediaUnavailable) {
+        continue;
+      }
+
       const mediaKey = buildParticipantMediaKey(participant);
       const existingRecord = this.calls.get(participant.id);
 
@@ -514,6 +554,15 @@ export class VoiceEngine {
       record.call.close();
       this.calls.delete(participantId);
       this.remoteMediaStreams.delete(participantId);
+    }
+
+    for (const [participantId, record] of this.dataConnections.entries()) {
+      if (activeParticipants.has(participantId)) {
+        continue;
+      }
+
+      record.connection.close();
+      this.dataConnections.delete(participantId);
     }
   }
 
@@ -640,6 +689,25 @@ export class VoiceEngine {
     this.deviceChangeHandler = null;
   }
 
+  sendDataMessage(message) {
+    for (const record of this.dataConnections.values()) {
+      if (record.connection.open) {
+        record.connection.send(message);
+      }
+    }
+  }
+
+  sendDataMessageToParticipant(participantId, message) {
+    const record = this.dataConnections.get(participantId);
+
+    if (!record?.connection.open) {
+      return false;
+    }
+
+    record.connection.send(message);
+    return true;
+  }
+
   attachCall(participantId, call, mediaKey = participantId) {
     const currentRecord = this.calls.get(participantId);
 
@@ -690,6 +758,48 @@ export class VoiceEngine {
     });
 
     call.on('error', (error) => {
+      this.callbacks.onError?.(error);
+    });
+  }
+
+  attachDataConnection(participantId, connection, peerId = connection.peer) {
+    const currentRecord = this.dataConnections.get(participantId);
+
+    if (currentRecord && currentRecord.connection !== connection) {
+      currentRecord.connection.close();
+    }
+
+    this.dataConnections.set(participantId, {
+      connection,
+      peerId,
+    });
+
+    connection.on('open', () => {
+      this.callbacks.onDataConnectionOpen?.(participantId);
+    });
+
+    if (connection.open) {
+      this.callbacks.onDataConnectionOpen?.(participantId);
+    }
+
+    connection.on('data', (payload) => {
+      this.callbacks.onDataMessage?.({
+        participantId,
+        payload,
+      });
+    });
+
+    connection.on('close', () => {
+      const current = this.dataConnections.get(participantId);
+
+      if (current?.connection === connection) {
+        this.dataConnections.delete(participantId);
+      }
+
+      this.callbacks.onDataConnectionClose?.(participantId);
+    });
+
+    connection.on('error', (error) => {
       this.callbacks.onError?.(error);
     });
   }

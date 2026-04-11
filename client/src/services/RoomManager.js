@@ -225,14 +225,14 @@ export async function updateParticipantState({ roomId, participantId, patch }) {
   await extendRoomLifetime(database, roomId, now);
 }
 
-export async function updateWatchParty({ roomId, nextState }) {
+export async function setWatchPartyMedia({ roomId, sourceUrl, videoId }) {
   const database = assertFirebaseConfigured();
   const now = Date.now();
 
   await update(ref(database, `rooms/${roomId}/metadata`), {
     watchParty: {
-      ...nextState,
-      syncedAt: now,
+      sourceUrl,
+      videoId,
       updatedAt: now,
     },
     expiresAt: now + ROOM_TTL_MS,

@@ -16,14 +16,112 @@ import {
   createRoom,
   joinRoom,
   leaveRoom,
+  setWatchPartyMedia,
   subscribeToParticipants,
   subscribeToRoom,
   updateParticipantState,
-  updateWatchParty,
 } from '../services/RoomManager.js';
 import { VoiceEngine } from '../services/VoiceEngine.js';
 
 const STORAGE_KEY = 'ephemeral-chat-display-name';
+const WATCH_PARTY_CHANNEL = 'watch-party';
+
+function normalizeWatchPartyMedia(input) {
+  if (!input?.videoId) {
+    return null;
+  }
+
+  return {
+    sourceUrl: input.sourceUrl || `https://www.youtube.com/watch?v=${input.videoId}`,
+    updatedAt: Number(input.updatedAt || Date.now()),
+    videoId: input.videoId,
+  };
+}
+
+function getSyncedWatchPartyPosition(watchParty, now = Date.now()) {
+  if (!watchParty) {
+    return 0;
+  }
+
+  const basePosition = Number(watchParty.position || 0);
+
+  if (watchParty.status !== 'playing') {
+    return basePosition;
+  }
+
+  const syncedAt = Number(watchParty.syncedAt || now);
+  return Math.max(0, basePosition + ((now - syncedAt) / 1000));
+}
+
+function mergeWatchPartyState(currentState, nextMedia) {
+  const normalizedMedia = normalizeWatchPartyMedia(nextMedia);
+
+  if (!normalizedMedia) {
+    return null;
+  }
+
+  if (
+    !currentState
+    || currentState.videoId !== normalizedMedia.videoId
+    || currentState.sourceUrl !== normalizedMedia.sourceUrl
+  ) {
+    return {
+      ...normalizedMedia,
+      position: 0,
+      status: 'paused',
+      syncedAt: normalizedMedia.updatedAt,
+    };
+  }
+
+  return {
+    ...currentState,
+    ...normalizedMedia,
+  };
+}
+
+function isWatchPartyMessage(payload) {
+  return payload?.channel === WATCH_PARTY_CHANNEL;
+}
+
+function buildWatchPartyStateMessage(watchParty, overrides = {}) {
+  const sentAt = Number(overrides.sentAt || Date.now());
+  const status = overrides.status || watchParty?.status || 'paused';
+  const position = overrides.position ?? getSyncedWatchPartyPosition(watchParty, sentAt);
+  const updatedAt = Number(overrides.updatedAt || watchParty?.updatedAt || sentAt);
+
+  return {
+    actorParticipantId: overrides.actorParticipantId || '',
+    channel: WATCH_PARTY_CHANNEL,
+    position: Number(position || 0),
+    sentAt,
+    sourceUrl: overrides.sourceUrl || watchParty?.sourceUrl || '',
+    status,
+    type: 'state',
+    updatedAt,
+    videoId: overrides.videoId || watchParty?.videoId || '',
+  };
+}
+
+function applyWatchPartyStateMessage(currentState, payload) {
+  const nextState = mergeWatchPartyState(currentState, payload);
+
+  if (!nextState) {
+    return null;
+  }
+
+  const sentAt = Number(payload.sentAt || Date.now());
+  const updatedAt = Number(payload.updatedAt || sentAt);
+
+  return {
+    ...nextState,
+    actorParticipantId: payload.actorParticipantId || '',
+    position: Number(payload.position || 0),
+    sourceUrl: payload.sourceUrl || nextState.sourceUrl,
+    status: payload.status === 'playing' ? 'playing' : 'paused',
+    syncedAt: sentAt,
+    updatedAt,
+  };
+}
 
 function RoomPage({ onToggleTheme, theme }) {
   const navigate = useNavigate();
@@ -35,6 +133,8 @@ function RoomPage({ onToggleTheme, theme }) {
   const screenPanelRef = useRef(null);
   const watchPanelRef = useRef(null);
   const railPanelRef = useRef(null);
+  const latestWatchPartyRef = useRef(null);
+  const lastWatchPartyMessageAtRef = useRef(0);
 
   const roomId = sanitizeRoomId(routeRoomId);
   const requestedMediaMode = searchParams.get('mode') === 'video' ? 'video' : 'voice';
@@ -155,11 +255,86 @@ function RoomPage({ onToggleTheme, theme }) {
     setAvailableDevices(nextDevices);
   });
 
+  const onDataMessage = useEffectEvent(({ participantId, payload }) => {
+    if (!isWatchPartyMessage(payload)) {
+      return;
+    }
+
+    if (payload.type === 'request-state') {
+      const currentWatchParty = latestWatchPartyRef.current;
+
+      if (!currentWatchParty?.videoId) {
+        return;
+      }
+
+      voiceEngineRef.current?.sendDataMessageToParticipant(
+        participantId,
+        buildWatchPartyStateMessage(currentWatchParty, {
+          actorParticipantId: participantIdRef.current,
+          sentAt: Date.now(),
+        }),
+      );
+      return;
+    }
+
+    const sentAt = Number(payload.updatedAt || payload.sentAt || Date.now());
+
+    if (sentAt <= lastWatchPartyMessageAtRef.current) {
+      return;
+    }
+
+    lastWatchPartyMessageAtRef.current = sentAt;
+
+    if (payload.type === 'clear') {
+      setWatchParty(null);
+      setWatchPartyOpen(false);
+
+      if (focusedPanel === 'watch') {
+        setFocusedPanel(null);
+      }
+
+      return;
+    }
+
+    if (payload.type !== 'state') {
+      return;
+    }
+
+    setWatchParty((currentWatchParty) => applyWatchPartyStateMessage(currentWatchParty, payload));
+  });
+
+  const onDataConnectionOpen = useEffectEvent((participantId) => {
+    const currentWatchParty = latestWatchPartyRef.current;
+
+    voiceEngineRef.current?.sendDataMessageToParticipant(participantId, {
+      actorParticipantId: participantIdRef.current,
+      channel: WATCH_PARTY_CHANNEL,
+      sentAt: Date.now(),
+      type: 'request-state',
+    });
+
+    if (!currentWatchParty?.videoId) {
+      return;
+    }
+
+    voiceEngineRef.current?.sendDataMessageToParticipant(
+      participantId,
+      buildWatchPartyStateMessage(currentWatchParty, {
+        actorParticipantId: participantIdRef.current,
+        sentAt: Date.now(),
+      }),
+    );
+  });
+
   useEffect(() => {
     if (!watchPartyActive && focusedPanel === 'watch') {
       setFocusedPanel(null);
     }
   }, [focusedPanel, watchPartyActive]);
+
+  useEffect(() => {
+    latestWatchPartyRef.current = watchParty;
+  }, [watchParty]);
 
   useEffect(() => {
     if (watchPartyActive) {
@@ -182,6 +357,8 @@ function RoomPage({ onToggleTheme, theme }) {
     let active = true;
     const voiceEngine = new VoiceEngine({
       onDevicesChanged,
+      onDataConnectionOpen,
+      onDataMessage,
       onError: onVoiceError,
       onLocalStream,
       onLocalPreviewStream,
@@ -210,6 +387,7 @@ function RoomPage({ onToggleTheme, theme }) {
     setAvailableDevices({ audioInputs: [], videoInputs: [] });
     setSelectedDevices({ audioInputId: '', videoInputId: '' });
     setWatchParty(null);
+    lastWatchPartyMessageAtRef.current = 0;
     setWatchPartyOpen(false);
     setChatOpen(false);
     setFocusedPanel(null);
@@ -256,7 +434,7 @@ function RoomPage({ onToggleTheme, theme }) {
         setIsJoinedRoom(true);
         const nextRoomMediaMode = room?.metadata?.mediaMode || requestedMediaMode;
         setRoomMediaMode(nextRoomMediaMode);
-        setWatchParty(room?.metadata?.watchParty || null);
+        setWatchParty((currentWatchParty) => mergeWatchPartyState(currentWatchParty, room?.metadata?.watchParty || null));
 
         if (!peerId) {
           return;
@@ -345,7 +523,7 @@ function RoomPage({ onToggleTheme, theme }) {
       }
 
       setRoomMediaMode(room.metadata?.mediaMode || 'voice');
-      setWatchParty(room.metadata?.watchParty || null);
+      setWatchParty((currentWatchParty) => mergeWatchPartyState(currentWatchParty, room.metadata?.watchParty || null));
     });
 
     const unsubscribeFromParticipants = subscribeToParticipants(roomId, (nextParticipants) => {
@@ -543,10 +721,33 @@ function RoomPage({ onToggleTheme, theme }) {
       return;
     }
 
-    await updateWatchParty({
-      roomId,
-      nextState,
+    const currentWatchParty = latestWatchPartyRef.current;
+    const nextMessage = buildWatchPartyStateMessage(currentWatchParty, {
+      ...nextState,
+      actorParticipantId: participantIdRef.current,
+      sentAt: Date.now(),
     });
+
+    if (!nextMessage.videoId) {
+      return;
+    }
+
+    const mediaChanged = (
+      currentWatchParty?.videoId !== nextMessage.videoId
+      || currentWatchParty?.sourceUrl !== nextMessage.sourceUrl
+    );
+
+    setWatchParty((currentState) => applyWatchPartyStateMessage(currentState, nextMessage));
+    lastWatchPartyMessageAtRef.current = nextMessage.sentAt;
+    voiceEngineRef.current?.sendDataMessage(nextMessage);
+
+    if (mediaChanged) {
+      await setWatchPartyMedia({
+        roomId,
+        sourceUrl: nextMessage.sourceUrl,
+        videoId: nextMessage.videoId,
+      });
+    }
   }
 
   async function handleClearWatchParty() {
@@ -555,6 +756,16 @@ function RoomPage({ onToggleTheme, theme }) {
     }
 
     await clearWatchParty(roomId);
+    const sentAt = Date.now();
+
+    lastWatchPartyMessageAtRef.current = sentAt;
+    setWatchParty(null);
+    voiceEngineRef.current?.sendDataMessage({
+      actorParticipantId: participantIdRef.current,
+      channel: WATCH_PARTY_CHANNEL,
+      sentAt,
+      type: 'clear',
+    });
     setWatchPartyOpen(false);
     if (focusedPanel === 'watch') {
       setFocusedPanel(null);
