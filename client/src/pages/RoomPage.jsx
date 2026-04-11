@@ -75,7 +75,10 @@ function mergeWatchPartyState(currentState, nextMedia) {
 
   return {
     ...currentState,
-    ...normalizedMedia,
+    mediaUpdatedAt: normalizedMedia.updatedAt,
+    sourceUrl: normalizedMedia.sourceUrl,
+    updatedAt: Math.max(Number(currentState.updatedAt || 0), normalizedMedia.updatedAt),
+    videoId: normalizedMedia.videoId,
   };
 }
 
@@ -721,11 +724,13 @@ function RoomPage({ onToggleTheme, theme }) {
       return;
     }
 
-    const currentWatchParty = latestWatchPartyRef.current;
-    const nextMessage = buildWatchPartyStateMessage(currentWatchParty, {
+  const currentWatchParty = latestWatchPartyRef.current;
+  const stateUpdatedAt = Date.now();
+  const nextMessage = buildWatchPartyStateMessage(currentWatchParty, {
       ...nextState,
       actorParticipantId: participantIdRef.current,
-      sentAt: Date.now(),
+      sentAt: stateUpdatedAt,
+      updatedAt: stateUpdatedAt,
     });
 
     if (!nextMessage.videoId) {

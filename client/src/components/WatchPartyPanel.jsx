@@ -172,6 +172,34 @@ function WatchPartyPanel({
   const latestWatchPartyRef = useRef(watchParty);
   const suppressEventsRef = useRef(false);
   const releaseSuppressTimerRef = useRef(0);
+  const lastPlayerSampleRef = useRef({
+    position: 0,
+    sampledAt: 0,
+    state: -1,
+  });
+
+  function resetPlayerSample(player = playerRef.current) {
+    lastPlayerSampleRef.current = {
+      position: player?.getCurrentTime?.() || 0,
+      sampledAt: Date.now(),
+      state: player?.getPlayerState?.() ?? -1,
+    };
+  }
+
+  function destroyPlayer() {
+    if (!playerRef.current) {
+      return;
+    }
+
+    playerRef.current.destroy?.();
+    playerRef.current = null;
+    setPlayerReady(false);
+    lastPlayerSampleRef.current = {
+      position: 0,
+      sampledAt: 0,
+      state: -1,
+    };
+  }
 
   useEffect(() => {
     latestWatchPartyRef.current = watchParty;
@@ -194,14 +222,7 @@ function WatchPartyPanel({
 
     async function setupPlayer() {
       if (!watchParty?.videoId) {
-        if (playerRef.current?.stopVideo) {
-          suppressEventsRef.current = true;
-          playerRef.current.stopVideo();
-          window.clearTimeout(releaseSuppressTimerRef.current);
-          releaseSuppressTimerRef.current = window.setTimeout(() => {
-            suppressEventsRef.current = false;
-          }, 250);
-        }
+        destroyPlayer();
         return;
       }
 
@@ -211,9 +232,19 @@ function WatchPartyPanel({
         return;
       }
 
+      const currentIframe = playerRef.current?.getIframe?.();
+
+      if (
+        playerRef.current
+        && (!currentIframe?.isConnected || currentIframe?.parentNode !== playerHostRef.current)
+      ) {
+        destroyPlayer();
+      }
+
       const startSeconds = getSyncedPosition(watchParty);
 
       if (!playerRef.current) {
+        setPlayerReady(false);
         playerRef.current = new YT.Player(playerHostRef.current, {
           height: '100%',
           width: '100%',
@@ -235,6 +266,7 @@ function WatchPartyPanel({
               syncPlayerToWatchParty(playerRef.current, latestWatchParty, {
                 force: true,
               });
+              resetPlayerSample(playerRef.current);
               window.clearTimeout(releaseSuppressTimerRef.current);
               releaseSuppressTimerRef.current = window.setTimeout(() => {
                 suppressEventsRef.current = false;
@@ -278,6 +310,8 @@ function WatchPartyPanel({
                   videoId: latestWatchParty.videoId,
                 });
               }
+
+              resetPlayerSample(playerRef.current);
             },
           },
         });
@@ -301,6 +335,7 @@ function WatchPartyPanel({
       releaseSuppressTimerRef.current = window.setTimeout(() => {
         suppressEventsRef.current = false;
       }, 400);
+      resetPlayerSample(playerRef.current);
     }
 
     void setupPlayer();
@@ -312,6 +347,7 @@ function WatchPartyPanel({
 
   useEffect(() => () => {
     window.clearTimeout(releaseSuppressTimerRef.current);
+    destroyPlayer();
   }, []);
 
   useEffect(() => {
@@ -351,6 +387,66 @@ function WatchPartyPanel({
       window.clearInterval(driftInterval);
     };
   }, [playerReady, watchParty?.status, watchParty?.videoId]);
+
+  useEffect(() => {
+    if (!playerReady || !watchParty?.videoId) {
+      return undefined;
+    }
+
+    const seekDetectionInterval = window.setInterval(() => {
+      if (!playerRef.current || suppressEventsRef.current) {
+        return;
+      }
+
+      const latestWatchParty = latestWatchPartyRef.current;
+
+      if (!latestWatchParty?.videoId) {
+        return;
+      }
+
+      const playerState = playerRef.current.getPlayerState?.() ?? -1;
+      const currentTime = playerRef.current.getCurrentTime?.() || 0;
+      const now = Date.now();
+      const previousSample = lastPlayerSampleRef.current;
+
+      if (!previousSample.sampledAt) {
+        resetPlayerSample(playerRef.current);
+        return;
+      }
+
+      const elapsedSeconds = (now - previousSample.sampledAt) / 1000;
+      const deltaSeconds = currentTime - previousSample.position;
+      const pausedSeekDetected = (
+        playerState !== window.YT?.PlayerState?.PLAYING
+        && Math.abs(deltaSeconds) > 0.9
+      );
+      const playingSeekDetected = (
+        playerState === window.YT?.PlayerState?.PLAYING
+        && previousSample.state === window.YT?.PlayerState?.PLAYING
+        && Math.abs(deltaSeconds - elapsedSeconds) > 1.2
+      );
+
+      if (pausedSeekDetected || playingSeekDetected) {
+        void onSyncState({
+          participantId,
+          position: currentTime,
+          sourceUrl: latestWatchParty.sourceUrl,
+          status: playerState === window.YT?.PlayerState?.PLAYING ? 'playing' : 'paused',
+          videoId: latestWatchParty.videoId,
+        });
+      }
+
+      lastPlayerSampleRef.current = {
+        position: currentTime,
+        sampledAt: now,
+        state: playerState,
+      };
+    }, 500);
+
+    return () => {
+      window.clearInterval(seekDetectionInterval);
+    };
+  }, [onSyncState, participantId, playerReady, watchParty?.videoId]);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -412,6 +508,7 @@ function WatchPartyPanel({
       return;
     }
 
+    resetPlayerSample(playerRef.current);
     void onSyncState({
       participantId,
       position: playerRef.current.getCurrentTime?.() || 0,
