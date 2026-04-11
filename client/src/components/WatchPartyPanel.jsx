@@ -170,35 +170,25 @@ function WatchPartyPanel({
   const playerHostRef = useRef(null);
   const playerRef = useRef(null);
   const latestWatchPartyRef = useRef(watchParty);
-  const suppressEventsRef = useRef(false);
-  const releaseSuppressTimerRef = useRef(0);
-  const lastPlayerSampleRef = useRef({
-    position: 0,
-    sampledAt: 0,
-    state: -1,
-  });
+  const isLocalActionRef = useRef(false);
+  const isRemoteActionRef = useRef(false);
+  const releaseLocalActionTimerRef = useRef(0);
+  const releaseRemoteActionTimerRef = useRef(0);
 
-  function resetPlayerSample(player = playerRef.current) {
-    lastPlayerSampleRef.current = {
-      position: player?.getCurrentTime?.() || 0,
-      sampledAt: Date.now(),
-      state: player?.getPlayerState?.() ?? -1,
-    };
+  function armLocalActionGuard(durationMs = 300) {
+    isLocalActionRef.current = true;
+    window.clearTimeout(releaseLocalActionTimerRef.current);
+    releaseLocalActionTimerRef.current = window.setTimeout(() => {
+      isLocalActionRef.current = false;
+    }, durationMs);
   }
 
-  function destroyPlayer() {
-    if (!playerRef.current) {
-      return;
-    }
-
-    playerRef.current.destroy?.();
-    playerRef.current = null;
-    setPlayerReady(false);
-    lastPlayerSampleRef.current = {
-      position: 0,
-      sampledAt: 0,
-      state: -1,
-    };
+  function armRemoteActionGuard(durationMs = 500) {
+    isRemoteActionRef.current = true;
+    window.clearTimeout(releaseRemoteActionTimerRef.current);
+    releaseRemoteActionTimerRef.current = window.setTimeout(() => {
+      isRemoteActionRef.current = false;
+    }, durationMs);
   }
 
   useEffect(() => {
@@ -222,7 +212,10 @@ function WatchPartyPanel({
 
     async function setupPlayer() {
       if (!watchParty?.videoId) {
-        destroyPlayer();
+        if (playerRef.current?.stopVideo) {
+          armRemoteActionGuard(250);
+          playerRef.current.stopVideo();
+        }
         return;
       }
 
@@ -232,16 +225,11 @@ function WatchPartyPanel({
         return;
       }
 
-      const currentIframe = playerRef.current?.getIframe?.();
-
-      if (
-        playerRef.current
-        && (!currentIframe?.isConnected || currentIframe?.parentNode !== playerHostRef.current)
-      ) {
-        destroyPlayer();
-      }
-
       const startSeconds = getSyncedPosition(watchParty);
+      const isRemoteUpdate = (
+        Boolean(watchParty.actorParticipantId)
+        && watchParty.actorParticipantId !== participantId
+      );
 
       if (!playerRef.current) {
         setPlayerReady(false);
@@ -262,20 +250,24 @@ function WatchPartyPanel({
                 return;
               }
 
-              suppressEventsRef.current = true;
+              if (
+                latestWatchParty.actorParticipantId
+                && latestWatchParty.actorParticipantId !== participantId
+              ) {
+                armRemoteActionGuard();
+              }
               syncPlayerToWatchParty(playerRef.current, latestWatchParty, {
                 force: true,
               });
-              resetPlayerSample(playerRef.current);
-              window.clearTimeout(releaseSuppressTimerRef.current);
-              releaseSuppressTimerRef.current = window.setTimeout(() => {
-                suppressEventsRef.current = false;
-              }, 400);
             },
             onStateChange: (event) => {
               const latestWatchParty = latestWatchPartyRef.current;
 
-              if (suppressEventsRef.current || !latestWatchParty?.videoId) {
+              if (
+                isRemoteActionRef.current
+                || isLocalActionRef.current
+                || !latestWatchParty?.videoId
+              ) {
                 return;
               }
 
@@ -310,8 +302,6 @@ function WatchPartyPanel({
                   videoId: latestWatchParty.videoId,
                 });
               }
-
-              resetPlayerSample(playerRef.current);
             },
           },
         });
@@ -320,8 +310,9 @@ function WatchPartyPanel({
       }
 
       const currentVideoId = playerRef.current.getVideoData?.().video_id;
-
-      suppressEventsRef.current = true;
+      if (isRemoteUpdate) {
+        armRemoteActionGuard();
+      }
 
       if (currentVideoId !== watchParty.videoId) {
         syncPlayerToWatchParty(playerRef.current, watchParty, { force: true });
@@ -330,12 +321,6 @@ function WatchPartyPanel({
           force: Math.abs((playerRef.current.getCurrentTime?.() || 0) - startSeconds) > 0.9,
         });
       }
-
-      window.clearTimeout(releaseSuppressTimerRef.current);
-      releaseSuppressTimerRef.current = window.setTimeout(() => {
-        suppressEventsRef.current = false;
-      }, 400);
-      resetPlayerSample(playerRef.current);
     }
 
     void setupPlayer();
@@ -346,107 +331,11 @@ function WatchPartyPanel({
   }, [onSyncState, participantId, watchParty]);
 
   useEffect(() => () => {
-    window.clearTimeout(releaseSuppressTimerRef.current);
-    destroyPlayer();
+    window.clearTimeout(releaseLocalActionTimerRef.current);
+    window.clearTimeout(releaseRemoteActionTimerRef.current);
+    playerRef.current?.destroy?.();
+    playerRef.current = null;
   }, []);
-
-  useEffect(() => {
-    if (!playerReady || !watchParty?.videoId || watchParty.status !== 'playing') {
-      return undefined;
-    }
-
-    const driftInterval = window.setInterval(() => {
-      if (!playerRef.current) {
-        return;
-      }
-
-      const latestWatchParty = latestWatchPartyRef.current;
-
-      if (!latestWatchParty?.videoId || latestWatchParty.status !== 'playing') {
-        return;
-      }
-
-      const expectedPosition = getSyncedPosition(latestWatchParty);
-      const actualPosition = playerRef.current.getCurrentTime?.() || 0;
-
-      if (Math.abs(actualPosition - expectedPosition) <= 0.85) {
-        return;
-      }
-
-      suppressEventsRef.current = true;
-      syncPlayerToWatchParty(playerRef.current, latestWatchParty, {
-        force: true,
-      });
-      window.clearTimeout(releaseSuppressTimerRef.current);
-      releaseSuppressTimerRef.current = window.setTimeout(() => {
-        suppressEventsRef.current = false;
-      }, 300);
-    }, 1500);
-
-    return () => {
-      window.clearInterval(driftInterval);
-    };
-  }, [playerReady, watchParty?.status, watchParty?.videoId]);
-
-  useEffect(() => {
-    if (!playerReady || !watchParty?.videoId) {
-      return undefined;
-    }
-
-    const seekDetectionInterval = window.setInterval(() => {
-      if (!playerRef.current || suppressEventsRef.current) {
-        return;
-      }
-
-      const latestWatchParty = latestWatchPartyRef.current;
-
-      if (!latestWatchParty?.videoId) {
-        return;
-      }
-
-      const playerState = playerRef.current.getPlayerState?.() ?? -1;
-      const currentTime = playerRef.current.getCurrentTime?.() || 0;
-      const now = Date.now();
-      const previousSample = lastPlayerSampleRef.current;
-
-      if (!previousSample.sampledAt) {
-        resetPlayerSample(playerRef.current);
-        return;
-      }
-
-      const elapsedSeconds = (now - previousSample.sampledAt) / 1000;
-      const deltaSeconds = currentTime - previousSample.position;
-      const pausedSeekDetected = (
-        playerState !== window.YT?.PlayerState?.PLAYING
-        && Math.abs(deltaSeconds) > 0.9
-      );
-      const playingSeekDetected = (
-        playerState === window.YT?.PlayerState?.PLAYING
-        && previousSample.state === window.YT?.PlayerState?.PLAYING
-        && Math.abs(deltaSeconds - elapsedSeconds) > 1.2
-      );
-
-      if (pausedSeekDetected || playingSeekDetected) {
-        void onSyncState({
-          participantId,
-          position: currentTime,
-          sourceUrl: latestWatchParty.sourceUrl,
-          status: playerState === window.YT?.PlayerState?.PLAYING ? 'playing' : 'paused',
-          videoId: latestWatchParty.videoId,
-        });
-      }
-
-      lastPlayerSampleRef.current = {
-        position: currentTime,
-        sampledAt: now,
-        state: playerState,
-      };
-    }, 500);
-
-    return () => {
-      window.clearInterval(seekDetectionInterval);
-    };
-  }, [onSyncState, participantId, playerReady, watchParty?.videoId]);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -475,7 +364,7 @@ function WatchPartyPanel({
 
     const isPlaying = watchParty.status === 'playing';
 
-    suppressEventsRef.current = true;
+    armLocalActionGuard();
 
     if (isPlaying) {
       playerRef.current.pauseVideo();
@@ -496,11 +385,6 @@ function WatchPartyPanel({
         videoId: watchParty.videoId,
       });
     }
-
-    window.clearTimeout(releaseSuppressTimerRef.current);
-    releaseSuppressTimerRef.current = window.setTimeout(() => {
-      suppressEventsRef.current = false;
-    }, 250);
   }
 
   function handleResync() {
@@ -508,7 +392,6 @@ function WatchPartyPanel({
       return;
     }
 
-    resetPlayerSample(playerRef.current);
     void onSyncState({
       participantId,
       position: playerRef.current.getCurrentTime?.() || 0,
@@ -557,13 +440,12 @@ function WatchPartyPanel({
       {panelError ? <p className="feedback error">{panelError}</p> : null}
 
       <div className="watch-party-player-shell">
-        {watchParty?.videoId ? (
-          <div className="watch-party-player" ref={playerHostRef} />
-        ) : (
+        <div className="watch-party-player" ref={playerHostRef} />
+        {!watchParty?.videoId ? (
           <div className="watch-party-empty">
             <p>Paste a YouTube link to start a shared clip.</p>
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="watch-party-toolbar">
